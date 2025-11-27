@@ -1,13 +1,37 @@
 [
   {
-    "id": "example-project",
-    "name": "Example Project",
-    "link": "https://example.com",
+    "name": "Borgundfjorden",
+    "link": "https://borgundfjorden.no/no/til-salgs/boligvelger",
+    "type": "Apartment Chooser",
+    "features": [
+      "Sun slider",
+      "Street view"
+    ],
+    "screenshot": "./projects/borgundfjorden/screenshot.png",
+    "id": "borgundfjorden",
+    "createdAt": "2025-11-27T15:57:01.759Z"
+  },
+  {
+    "name": "hagby-gardskvarter_g3k",
+    "link": "https://explore.plyo.cloud/hagby-gardskvarter_g3k_showroom",
     "type": "Virtual Showroom",
     "features": [
-      "Floor plan",
-      "Styles"
+      "Styles",
+      "Hotspots"
     ],
-    "createdAt": "2024-01-01T00:00:00.000Z"
+    "screenshot": "./projects/hagby-gardskvarter-g3k/screenshot.png",
+    "id": "hagby-gardskvarter-g3k",
+    "createdAt": "2025-11-27T18:41:10.768Z"
+  },
+  {
+    "name": "Mariakvartalet",
+    "link": "https://mariakvartalet.plyo.cloud/new-homes-single-project/boligvelger",
+    "type": "Apartment Chooser",
+    "features": [
+      "Street view"
+    ],
+    "screenshot": "./projects/mariakvartalet/screenshot.png",
+    "id": "mariakvartalet",
+    "createdAt": "2025-11-27T18:45:20.295Z"
   }
 ]

@@ -19,8 +19,11 @@ import {
   Image,
   FileButton,
   Alert,
+  Text,
+  SegmentedControl,
+  Box,
 } from '@mantine/core';
-import { IconEdit, IconTrash, IconPlus, IconLogout, IconSettings, IconPhoto } from '@tabler/icons-react';
+import { IconEdit, IconTrash, IconPlus, IconLogout, IconSettings, IconPhoto, IconEye } from '@tabler/icons-react';
 import { ExploreInstance, InstanceType } from '@/app/lib/types';
 
 export default function DashboardPage() {
@@ -32,6 +35,7 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const [viewMode, setViewMode] = useState<'viewer' | 'admin'>('admin');
   
   // Form state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,7 +55,7 @@ export default function DashboardPage() {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/auth');
+      const response = await fetch('/api/auth/');
       const data = await response.json();
       if (!data.authenticated) {
         router.push('/admin/login');
@@ -65,24 +69,60 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
-      const basePath = process.env.NODE_ENV === 'production' ? '/explore' : '';
+      // Use relative path that works with basePath
+      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/admin.*$/, '').replace(/\/$/, '') : '';
+      console.log('Admin dashboard loading from basePath:', basePath);
+      
+      // Add cache-busting parameter to ensure fresh data
+      const cacheBuster = `?t=${Date.now()}`;
       const [instancesRes, featuresRes] = await Promise.all([
-        fetch(`${basePath}/instances.json`),
-        fetch(`${basePath}/data/features.json`),
+        fetch(`${basePath}/instances.json${cacheBuster}`),
+        fetch(`${basePath}/data/features.json${cacheBuster}`),
       ]);
+      
+      if (!instancesRes.ok) {
+        throw new Error(`Failed to fetch instances: ${instancesRes.status} ${instancesRes.statusText}`);
+      }
+      if (!featuresRes.ok) {
+        throw new Error(`Failed to fetch features: ${featuresRes.status} ${featuresRes.statusText}`);
+      }
+      
       const instancesData = await instancesRes.json();
       const featuresData = await featuresRes.json();
-      setInstances(instancesData);
+      
+      // Fix screenshot paths to be absolute
+      const instancesWithPaths = instancesData.map((instance: ExploreInstance) => {
+        let screenshotPath = instance.screenshot;
+        if (screenshotPath) {
+          // Convert relative paths (./projects/...) to absolute paths (/projects/...)
+          if (screenshotPath.startsWith('./')) {
+            screenshotPath = screenshotPath.replace('./', '/');
+          } else if (!screenshotPath.startsWith('/')) {
+            screenshotPath = '/' + screenshotPath;
+          }
+          screenshotPath = basePath + screenshotPath;
+        }
+        return {
+          ...instance,
+          screenshot: screenshotPath,
+        };
+      });
+      
+      console.log('Admin dashboard loaded instances:', instancesWithPaths);
+      console.log('Admin dashboard loaded features:', featuresData);
+      
+      setInstances(instancesWithPaths);
       setFeatures(featuresData);
     } catch (error) {
       console.error('Failed to load data:', error);
+      setInstances([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth', { method: 'DELETE' });
+    await fetch('/api/auth/', { method: 'DELETE' });
     router.push('/admin/login');
   };
 
@@ -148,6 +188,8 @@ export default function DashboardPage() {
           body: JSON.stringify({ id: editingId, ...instanceData }),
         });
         if (response.ok) {
+          // Small delay to ensure file system write completes
+          await new Promise(resolve => setTimeout(resolve, 100));
           await loadData();
           setModalOpened(false);
           resetForm();
@@ -159,6 +201,8 @@ export default function DashboardPage() {
           body: JSON.stringify(instanceData),
         });
         if (response.ok) {
+          // Small delay to ensure file system write completes
+          await new Promise(resolve => setTimeout(resolve, 100));
           await loadData();
           setModalOpened(false);
           resetForm();
@@ -177,6 +221,8 @@ export default function DashboardPage() {
         method: 'DELETE',
       });
       if (response.ok) {
+        // Small delay to ensure file system write completes
+        await new Promise(resolve => setTimeout(resolve, 100));
         await loadData();
       }
     } catch (error) {
@@ -192,9 +238,11 @@ export default function DashboardPage() {
 
   return (
     <Container size="xl" py="xl">
-      <Group justify="space-between" mb="xl">
-        <Title order={1}>Admin Dashboard</Title>
-        <Group>
+      <Box pos="relative" mb="xl">
+        <Title order={1} mb="xl">
+          Explore Showcases
+        </Title>
+        <Group gap="md" style={{ position: 'absolute', top: 0, right: 0 }}>
           <Button
             variant="light"
             leftSection={<IconSettings size={16} />}
@@ -209,8 +257,22 @@ export default function DashboardPage() {
           >
             Logout
           </Button>
+          <SegmentedControl
+            value={viewMode}
+            onChange={(value) => {
+              const mode = value as 'viewer' | 'admin';
+              setViewMode(mode);
+              if (mode === 'viewer') {
+                router.push('/');
+              }
+            }}
+            data={[
+              { label: 'Viewer', value: 'viewer' },
+              { label: 'Admin', value: 'admin' },
+            ]}
+          />
         </Group>
-      </Group>
+      </Box>
 
       <Paper p="md" mb="xl">
         <Button
@@ -237,43 +299,65 @@ export default function DashboardPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {instances.map((instance) => (
-              <Table.Tr key={instance.id}>
-                <Table.Td>{instance.name}</Table.Td>
-                <Table.Td>
-                  <Badge>{instance.type}</Badge>
-                </Table.Td>
-                <Table.Td>
-                  <a href={instance.link} target="_blank" rel="noopener noreferrer">
-                    {instance.link}
-                  </a>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="xs">
-                    {instance.features.map((f) => (
-                      <Badge key={f} size="sm" variant="light">
-                        {f}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Table.Td>
-                <Table.Td>
-                  {instance.screenshot && (
-                    <Image src={instance.screenshot} alt="Screenshot" width={50} height={50} fit="cover" />
-                  )}
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="xs">
-                    <ActionIcon color="blue" onClick={() => openEditModal(instance)}>
-                      <IconEdit size={16} />
-                    </ActionIcon>
-                    <ActionIcon color="red" onClick={() => handleDelete(instance.id)}>
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Group>
+            {instances.length > 0 ? (
+              instances.map((instance) => (
+                <Table.Tr key={instance.id}>
+                  <Table.Td>{instance.name}</Table.Td>
+                  <Table.Td>
+                    <Badge>{instance.type}</Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <a href={instance.link} target="_blank" rel="noopener noreferrer">
+                      {instance.link}
+                    </a>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs">
+                      {instance.features.map((f) => (
+                        <Badge key={f} size="sm" variant="light">
+                          {f}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td>
+                    {instance.screenshot && (
+                      <Box
+                        style={{
+                          width: '160px',
+                          height: '120px',
+                          borderRadius: 'var(--mantine-radius-md)',
+                          overflow: 'hidden',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                        }}
+                      >
+                        <Image
+                          src={instance.screenshot}
+                          alt={`${instance.name} preview`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      </Box>
+                    )}
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs">
+                      <ActionIcon color="blue" onClick={() => openEditModal(instance)}>
+                        <IconEdit size={16} />
+                      </ActionIcon>
+                      <ActionIcon color="red" onClick={() => handleDelete(instance.id)}>
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))
+            ) : (
+              <Table.Tr>
+                <Table.Td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
+                  <Text c="dimmed">No instances found. {loading ? 'Loading...' : 'Click "Add New Instance" to create one.'}</Text>
                 </Table.Td>
               </Table.Tr>
-            ))}
+            )}
           </Table.Tbody>
         </Table>
       </Paper>

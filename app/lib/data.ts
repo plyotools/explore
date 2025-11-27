@@ -4,11 +4,14 @@ import path from 'path';
 
 const PROJECTS_DIR = path.join(process.cwd(), 'public', 'projects');
 const FEATURES_FILE = path.join(process.cwd(), 'data', 'features.json');
+const FEATURES_PUBLIC_FILE = path.join(process.cwd(), 'public', 'data', 'features.json');
+const INDEX_FILE = path.join(process.cwd(), 'public', 'instances.json');
 
 // Ensure directories exist
 async function ensureDirectories() {
   await fs.mkdir(PROJECTS_DIR, { recursive: true });
   await fs.mkdir(path.dirname(FEATURES_FILE), { recursive: true });
+  await fs.mkdir(path.dirname(FEATURES_PUBLIC_FILE), { recursive: true });
 }
 
 // Get project directory path
@@ -92,7 +95,7 @@ export async function addInstance(instance: Omit<ExploreInstance, 'id' | 'create
   let counter = 1;
   while (true) {
     try {
-      await fs.access(projectDir);
+      await fs.access(getProjectDir(finalProjectId));
       finalProjectId = `${projectId}-${counter}`;
       counter++;
     } catch {
@@ -125,6 +128,9 @@ export async function addInstance(instance: Omit<ExploreInstance, 'id' | 'create
     newInstance.screenshot = `/projects/${finalProjectId}/screenshot.${extension}`;
   }
   
+  // Regenerate index
+  await regenerateIndex();
+  
   return newInstance;
 }
 
@@ -156,6 +162,10 @@ export async function updateInstance(id: string, updates: Partial<Omit<ExploreIn
     }
     
     await fs.writeFile(metadataPath, JSON.stringify(updated, null, 2), 'utf-8');
+    
+    // Regenerate index
+    await regenerateIndex();
+    
     return updated;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -170,6 +180,10 @@ export async function deleteInstance(id: string): Promise<boolean> {
   try {
     const projectDir = getProjectDir(id);
     await fs.rm(projectDir, { recursive: true, force: true });
+    
+    // Regenerate index
+    await regenerateIndex();
+    
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -192,7 +206,13 @@ export async function getFeatures(): Promise<FeatureConfig> {
         "Virtual Showroom": ["Floor plan", "Styles", "Hotspots"],
         "Apartment Chooser": ["Sun path", "Sun slider", "Street view"]
       };
-      await fs.writeFile(FEATURES_FILE, JSON.stringify(defaultFeatures, null, 2), 'utf-8');
+      // Ensure public/data directory exists
+      await fs.mkdir(path.dirname(FEATURES_PUBLIC_FILE), { recursive: true });
+      // Write to both locations
+      await Promise.all([
+        fs.writeFile(FEATURES_FILE, JSON.stringify(defaultFeatures, null, 2), 'utf-8'),
+        fs.writeFile(FEATURES_PUBLIC_FILE, JSON.stringify(defaultFeatures, null, 2), 'utf-8'),
+      ]);
       return defaultFeatures;
     }
     console.error('Error fetching features:', error);
@@ -207,5 +227,31 @@ export async function getFeatures(): Promise<FeatureConfig> {
 // Update features configuration
 export async function updateFeatures(features: FeatureConfig): Promise<void> {
   await ensureDirectories();
-  await fs.writeFile(FEATURES_FILE, JSON.stringify(features, null, 2), 'utf-8');
+  // Ensure public/data directory exists
+  await fs.mkdir(path.dirname(FEATURES_PUBLIC_FILE), { recursive: true });
+  // Write to both locations
+  await Promise.all([
+    fs.writeFile(FEATURES_FILE, JSON.stringify(features, null, 2), 'utf-8'),
+    fs.writeFile(FEATURES_PUBLIC_FILE, JSON.stringify(features, null, 2), 'utf-8'),
+  ]);
+}
+
+// Regenerate instances.json index file
+export async function regenerateIndex(): Promise<void> {
+  try {
+    const instances = await getInstances();
+    console.log(`Regenerating index with ${instances.length} instances`);
+    // Fix screenshot paths to use relative paths for static export
+    const instancesWithRelativePaths = instances.map(instance => ({
+      ...instance,
+      screenshot: instance.screenshot 
+        ? instance.screenshot.replace(/^\/projects\//, './projects/')
+        : undefined,
+    }));
+    await fs.writeFile(INDEX_FILE, JSON.stringify(instancesWithRelativePaths, null, 2), 'utf-8');
+    console.log(`Successfully regenerated index with ${instancesWithRelativePaths.length} instances`);
+  } catch (error) {
+    console.error('Error regenerating index:', error);
+    throw error;
+  }
 }

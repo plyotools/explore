@@ -35,7 +35,7 @@ export default function FeaturesPage() {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/auth');
+      const response = await fetch('/api/auth/');
       const data = await response.json();
       if (!data.authenticated) {
         router.push('/admin/login');
@@ -61,7 +61,7 @@ export default function FeaturesPage() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth', { method: 'DELETE' });
+    await fetch('/api/auth/', { method: 'DELETE' });
     router.push('/admin/login');
   };
 

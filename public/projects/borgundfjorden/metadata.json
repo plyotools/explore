@@ -1,0 +1,12 @@
+{
+  "name": "Borgundfjorden",
+  "link": "https://borgundfjorden.no/no/til-salgs/boligvelger",
+  "type": "Apartment Chooser",
+  "features": [
+    "Sun slider",
+    "Street view"
+  ],
+  "screenshot": "/projects/borgundfjorden/screenshot.png",
+  "id": "borgundfjorden",
+  "createdAt": "2025-11-27T15:57:01.759Z"
+}

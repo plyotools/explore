@@ -1,0 +1,11 @@
+{
+  "name": "Mariakvartalet",
+  "link": "https://mariakvartalet.plyo.cloud/new-homes-single-project/boligvelger",
+  "type": "Apartment Chooser",
+  "features": [
+    "Street view"
+  ],
+  "screenshot": "/projects/mariakvartalet/screenshot.png",
+  "id": "mariakvartalet",
+  "createdAt": "2025-11-27T18:45:20.295Z"
+}
