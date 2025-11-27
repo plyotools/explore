@@ -89,9 +89,33 @@ Access the admin panel at `/admin/login` to:
 ## Development
 
 - `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
+- `npm run build` - Build for production (generates static export)
+- `npm run export` - Alias for build
+- `npm run start` - Start production server (not used for static export)
 - `npm run lint` - Run ESLint
+
+## Deployment to GitHub Pages
+
+This project is configured to deploy to GitHub Pages at `https://plyotools.github.io/explore/`.
+
+### Setup
+
+1. Push code to GitHub repository: `https://github.com/plyotools/explore`
+2. Enable GitHub Pages in repository settings:
+   - Go to Settings → Pages
+   - Source: GitHub Actions
+3. The GitHub Actions workflow (`.github/workflows/deploy.yml`) will automatically:
+   - Build the static site
+   - Generate `instances.json` from project folders
+   - Deploy to GitHub Pages
+
+### Manual Deployment
+
+```bash
+npm run build
+# The output will be in the 'out' directory
+# You can deploy this to any static hosting service
+```
 
 ## Notes
 
@@ -99,4 +123,6 @@ Access the admin panel at `/admin/login` to:
 - If a folder name already exists, a number suffix is added (e.g., `project-name-1`)
 - Screenshots are stored as files in the project folder and referenced in metadata
 - The application reads all folders in `public/projects/` and loads their metadata.json files
+- For static export, the build process generates `public/instances.json` from all project metadata
+- Admin panel is read-only in production (static export doesn't support write operations)
 

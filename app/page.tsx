@@ -29,9 +29,16 @@ export default function HomePage() {
 
   const loadInstances = async () => {
     try {
-      const response = await fetch('/api/instances');
+      // Use relative path that works with basePath
+      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+      const response = await fetch(`${basePath}/instances.json`);
       const data = await response.json();
-      setInstances(data);
+      // Fix screenshot paths to be absolute
+      const instancesWithPaths = data.map((instance: ExploreInstance) => ({
+        ...instance,
+        screenshot: instance.screenshot ? `${basePath}${instance.screenshot.replace(/^\./, '')}` : undefined,
+      }));
+      setInstances(instancesWithPaths);
     } catch (error) {
       console.error('Failed to load instances:', error);
     } finally {

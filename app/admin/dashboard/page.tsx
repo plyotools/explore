@@ -65,9 +65,10 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
+      const basePath = process.env.NODE_ENV === 'production' ? '/explore' : '';
       const [instancesRes, featuresRes] = await Promise.all([
-        fetch('/api/instances'),
-        fetch('/api/features'),
+        fetch(`${basePath}/instances.json`),
+        fetch(`${basePath}/data/features.json`),
       ]);
       const instancesData = await instancesRes.json();
       const featuresData = await featuresRes.json();

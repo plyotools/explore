@@ -49,7 +49,8 @@ export default function FeaturesPage() {
 
   const loadFeatures = async () => {
     try {
-      const response = await fetch('/api/features');
+      const basePath = process.env.NODE_ENV === 'production' ? '/explore' : '';
+      const response = await fetch(`${basePath}/data/features.json`);
       const data = await response.json();
       setFeatures(data);
     } catch (error) {
