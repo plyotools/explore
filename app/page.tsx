@@ -1320,6 +1320,14 @@ export default function HomePage() {
     });
   }, [instances, typeFilter, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
 
+  // Check if there are any featured instances (for partner role filter visibility)
+  const hasFeaturedInstances = useMemo(() => {
+    return featuredInstances.size > 0;
+  }, [featuredInstances]);
+
+  // For partners, only show filters if there are featured instances
+  const shouldShowFilters = userRole !== 'partner' || hasFeaturedInstances;
+
   const clientOptions = useMemo(() => {
     const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
     const clientNames = Array.from(
@@ -1675,76 +1683,81 @@ export default function HomePage() {
       </Box>
 
       <Stack gap="md" mb="xl">
-        <Group gap="sm" align="flex-end" wrap="wrap">
-          <FilterDropdown
-            ref={typeFilterRef}
-            label="Type"
-            data={typeOptions}
-            selectedValues={typeFilter}
-            onApply={setTypeFilter}
-            onClear={() => setTypeFilter([])}
-            searchPlaceholder="Search types"
-            onNavigateRight={() => clientFilterRef.current?.open()}
-            isLeftmost={true}
-          />
-          <FilterDropdown
-            ref={clientFilterRef}
-            label="Client"
-            data={clientOptions}
-            selectedValues={clientFilter}
-            onApply={setClientFilter}
-            onClear={() => setClientFilter([])}
-            searchPlaceholder="Search clients"
-            onNavigateLeft={() => typeFilterRef.current?.open()}
-            onNavigateRight={() => projectFilterRef.current?.open()}
-          />
-          <FilterDropdown
-            ref={projectFilterRef}
-            label="Project"
-            data={projectOptions}
-            selectedValues={projectFilter}
-            onApply={setProjectFilter}
-            onClear={() => setProjectFilter([])}
-            searchPlaceholder="Search projects"
-            onNavigateLeft={() => clientFilterRef.current?.open()}
-            onNavigateRight={() => featureFilterRef.current?.open()}
-          />
-          <FilterDropdown
-            ref={featureFilterRef}
-            label="Feature"
-            data={flattenedFeatures}
-            selectedValues={selectedFeature}
-            onApply={setSelectedFeature}
-            onClear={() => setSelectedFeature([])}
-            searchPlaceholder="Search features"
-            onNavigateLeft={() => projectFilterRef.current?.open()}
-            onNavigateRight={() => statusFilterRef.current?.open()}
-          />
-          <FilterDropdown
-            ref={statusFilterRef}
-            label="Status"
-            data={statusOptions}
-            selectedValues={statusFilter}
-            onApply={setStatusFilter}
-            onClear={() => setStatusFilter([])}
-            searchPlaceholder="Search status"
-            onNavigateLeft={() => featureFilterRef.current?.open()}
-            onNavigateRight={() => userRole !== 'partner' && starredFilterRef.current?.open()}
-            isRightmost={userRole === 'partner'}
-          />
-          {userRole !== 'partner' && (
+        {shouldShowFilters && (
+          <Group gap="sm" align="flex-end" wrap="wrap">
             <FilterDropdown
-              ref={starredFilterRef}
-              label="Starred"
-              data={featuredOptions}
-              selectedValues={featuredFilter}
-              onApply={setFeaturedFilter}
-              onClear={() => setFeaturedFilter([])}
-              searchPlaceholder="Search"
-              onNavigateLeft={() => statusFilterRef.current?.open()}
-              isRightmost={true}
+              ref={typeFilterRef}
+              label="Type"
+              data={typeOptions}
+              selectedValues={typeFilter}
+              onApply={setTypeFilter}
+              onClear={() => setTypeFilter([])}
+              searchPlaceholder="Search types"
+              onNavigateRight={() => clientFilterRef.current?.open()}
+              isLeftmost={true}
             />
-          )}
+            <FilterDropdown
+              ref={clientFilterRef}
+              label="Client"
+              data={clientOptions}
+              selectedValues={clientFilter}
+              onApply={setClientFilter}
+              onClear={() => setClientFilter([])}
+              searchPlaceholder="Search clients"
+              onNavigateLeft={() => typeFilterRef.current?.open()}
+              onNavigateRight={() => projectFilterRef.current?.open()}
+            />
+            <FilterDropdown
+              ref={projectFilterRef}
+              label="Project"
+              data={projectOptions}
+              selectedValues={projectFilter}
+              onApply={setProjectFilter}
+              onClear={() => setProjectFilter([])}
+              searchPlaceholder="Search projects"
+              onNavigateLeft={() => clientFilterRef.current?.open()}
+              onNavigateRight={() => featureFilterRef.current?.open()}
+            />
+            <FilterDropdown
+              ref={featureFilterRef}
+              label="Feature"
+              data={flattenedFeatures}
+              selectedValues={selectedFeature}
+              onApply={setSelectedFeature}
+              onClear={() => setSelectedFeature([])}
+              searchPlaceholder="Search features"
+              onNavigateLeft={() => projectFilterRef.current?.open()}
+              onNavigateRight={() => statusFilterRef.current?.open()}
+            />
+            <FilterDropdown
+              ref={statusFilterRef}
+              label="Status"
+              data={statusOptions}
+              selectedValues={statusFilter}
+              onApply={setStatusFilter}
+              onClear={() => setStatusFilter([])}
+              searchPlaceholder="Search status"
+              onNavigateLeft={() => featureFilterRef.current?.open()}
+              onNavigateRight={() => userRole !== 'partner' && starredFilterRef.current?.open()}
+              isRightmost={userRole === 'partner'}
+            />
+            {userRole !== 'partner' && (
+              <FilterDropdown
+                ref={starredFilterRef}
+                label="Starred"
+                data={featuredOptions}
+                selectedValues={featuredFilter}
+                onApply={setFeaturedFilter}
+                onClear={() => setFeaturedFilter([])}
+                searchPlaceholder="Search"
+                onNavigateLeft={() => statusFilterRef.current?.open()}
+                isRightmost={true}
+              />
+            )}
+          </Group>
+        )}
+        {shouldShowFilters && (
+          <Group gap="sm" align="flex-end" wrap="wrap">
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1783,8 +1796,9 @@ export default function HomePage() {
                 />
               )}
             </Group>
+        )}
             {/* Filter Tags Row */}
-            {(typeFilter.length > 0 || clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
+            {shouldShowFilters && (typeFilter.length > 0 || clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
               <Group gap="xs" wrap="wrap">
                 {typeFilter.map((type) => (
                   <FilterTag
