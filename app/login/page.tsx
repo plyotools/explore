@@ -5,17 +5,23 @@ import { Container, Paper, Title, PasswordInput, Button, Alert, Text } from '@ma
 import { IconAlertCircle } from '@tabler/icons-react';
 
 // Simple client-side password check used when API routes are not available
-function clientVerifyPassword(password: string): { valid: boolean; isAdmin: boolean } {
-  const normalPassword = 'explore';
-  const adminPassword = 'exploreadmin';
+type UserRole = 'viewer' | 'admin' | 'partner';
 
-  if (password === normalPassword) {
-    return { valid: true, isAdmin: false };
+function clientVerifyPassword(password: string): { valid: boolean; role: UserRole } {
+  const viewerPassword = 'viewer';
+  const adminPassword = 'exploreadmin';
+  const partnerPassword = 'partner';
+
+  if (password === viewerPassword) {
+    return { valid: true, role: 'viewer' };
   }
   if (password === adminPassword) {
-    return { valid: true, isAdmin: true };
+    return { valid: true, role: 'admin' };
   }
-  return { valid: false, isAdmin: false };
+  if (password === partnerPassword) {
+    return { valid: true, role: 'partner' };
+  }
+  return { valid: false, role: 'viewer' };
 }
 
 function getBasePath(): string {
@@ -97,7 +103,8 @@ export default function LoginPage() {
       if (result.valid) {
         if (typeof window !== 'undefined') {
           window.localStorage.setItem('explore_session', 'authenticated');
-          window.localStorage.setItem('explore_is_admin', result.isAdmin ? 'true' : 'false');
+          window.localStorage.setItem('explore_user_role', result.role);
+          window.localStorage.setItem('explore_is_admin', result.role === 'admin' ? 'true' : 'false');
         }
         window.location.href = basePath || '/';
       } else {

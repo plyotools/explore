@@ -118,6 +118,7 @@ export default function HomePage() {
   const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [authenticated, setAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<'viewer' | 'admin' | 'partner'>('viewer');
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [basePath, setBasePath] = useState<string>('');
   
@@ -415,11 +416,13 @@ export default function HomePage() {
 
       if (process.env.NODE_ENV === 'production') {
         const session = window.localStorage.getItem('explore_session');
+        const role = (window.localStorage.getItem('explore_user_role') || 'viewer') as 'viewer' | 'admin' | 'partner';
         const adminFlag = window.localStorage.getItem('explore_is_admin') === 'true';
 
         if (session === 'authenticated') {
           setAuthenticated(true);
           setIsAdmin(adminFlag);
+          setUserRole(role);
           setCheckingAuth(false);
           return;
         }
@@ -445,6 +448,7 @@ export default function HomePage() {
       if (data.authenticated) {
         setAuthenticated(true);
         setIsAdmin(data.isAdmin || false);
+        setUserRole(data.role || 'viewer');
         setCheckingAuth(false);
       } else {
         // Not authenticated, redirect immediately
@@ -699,6 +703,9 @@ export default function HomePage() {
 
   const filteredInstances = useMemo(() => {
     return instances.filter((instance) => {
+      // Partner role: only show featured instances
+      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
+      
       if (activeTab !== 'All' && instance.type !== activeTab) return false;
       if (selectedFeature && !instance.features.includes(selectedFeature)) return false;
       if (statusFilter === 'active' && instance.active === false) return false;
@@ -707,7 +714,7 @@ export default function HomePage() {
       if (featuredFilter === 'featured' && !featuredInstances.has(instance.id)) return false;
       return true;
     });
-  }, [instances, activeTab, selectedFeature, statusFilter, clientFilter, featuredFilter, featuredInstances]);
+  }, [instances, activeTab, selectedFeature, statusFilter, clientFilter, featuredFilter, featuredInstances, userRole]);
 
   const clientOptions = useMemo(() => {
     const clients = Array.from(
@@ -993,23 +1000,25 @@ export default function HomePage() {
                   },
                 }}
               />
-              <Select
-                placeholder="Featured"
-                data={[
-                  { value: 'all', label: 'All' },
-                  { value: 'featured', label: 'Featured' },
-                ]}
-                value={featuredFilter}
-                onChange={(value) => {
-                  setFeaturedFilter((value as 'all' | 'featured') || 'all');
-                }}
-                style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
+              {userRole !== 'partner' && (
+                <Select
+                  placeholder="Featured"
+                  data={[
+                    { value: 'all', label: 'All' },
+                    { value: 'featured', label: 'Featured' },
+                  ]}
+                  value={featuredFilter}
+                  onChange={(value) => {
+                    setFeaturedFilter((value as 'all' | 'featured') || 'all');
+                  }}
+                  style={{ maxWidth: 160 }}
+                  styles={{
+                    input: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                  }}
+                />
+              )}
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1124,25 +1133,27 @@ export default function HomePage() {
                               }
                             }}
                           />
-                          <ActionIcon
-                            variant="filled"
-                            color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
-                            size="sm"
-                            style={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              zIndex: 10,
-                              backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleFeatured(instance.id);
-                            }}
-                          >
-                            {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-                          </ActionIcon>
+                          {userRole !== 'partner' && (
+                            <ActionIcon
+                              variant="filled"
+                              color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
+                              size="sm"
+                              style={{
+                                position: 'absolute',
+                                top: 8,
+                                right: 8,
+                                zIndex: 10,
+                                backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleFeatured(instance.id);
+                              }}
+                            >
+                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                            </ActionIcon>
+                          )}
                           {instance.features.length > 0 && (
                             <Box
                               style={{
@@ -1327,23 +1338,25 @@ export default function HomePage() {
                   },
                 }}
               />
-              <Select
-                placeholder="Featured"
-                data={[
-                  { value: 'all', label: 'All' },
-                  { value: 'featured', label: 'Featured' },
-                ]}
-                value={featuredFilter}
-                onChange={(value) => {
-                  setFeaturedFilter((value as 'all' | 'featured') || 'all');
-                }}
-                style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
+              {userRole !== 'partner' && (
+                <Select
+                  placeholder="Featured"
+                  data={[
+                    { value: 'all', label: 'All' },
+                    { value: 'featured', label: 'Featured' },
+                  ]}
+                  value={featuredFilter}
+                  onChange={(value) => {
+                    setFeaturedFilter((value as 'all' | 'featured') || 'all');
+                  }}
+                  style={{ maxWidth: 160 }}
+                  styles={{
+                    input: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                  }}
+                />
+              )}
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1458,25 +1471,27 @@ export default function HomePage() {
                               }
                             }}
                           />
-                          <ActionIcon
-                            variant="filled"
-                            color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
-                            size="sm"
-                            style={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              zIndex: 10,
-                              backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleFeatured(instance.id);
-                            }}
-                          >
-                            {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-                          </ActionIcon>
+                          {userRole !== 'partner' && (
+                            <ActionIcon
+                              variant="filled"
+                              color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
+                              size="sm"
+                              style={{
+                                position: 'absolute',
+                                top: 8,
+                                right: 8,
+                                zIndex: 10,
+                                backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleFeatured(instance.id);
+                              }}
+                            >
+                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                            </ActionIcon>
+                          )}
                           {instance.features.length > 0 && (
                             <Box
                               style={{
@@ -1661,23 +1676,25 @@ export default function HomePage() {
                   },
                 }}
               />
-              <Select
-                placeholder="Featured"
-                data={[
-                  { value: 'all', label: 'All' },
-                  { value: 'featured', label: 'Featured' },
-                ]}
-                value={featuredFilter}
-                onChange={(value) => {
-                  setFeaturedFilter((value as 'all' | 'featured') || 'all');
-                }}
-                style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
+              {userRole !== 'partner' && (
+                <Select
+                  placeholder="Featured"
+                  data={[
+                    { value: 'all', label: 'All' },
+                    { value: 'featured', label: 'Featured' },
+                  ]}
+                  value={featuredFilter}
+                  onChange={(value) => {
+                    setFeaturedFilter((value as 'all' | 'featured') || 'all');
+                  }}
+                  style={{ maxWidth: 160 }}
+                  styles={{
+                    input: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                  }}
+                />
+              )}
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1792,25 +1809,27 @@ export default function HomePage() {
                               }
                             }}
                           />
-                          <ActionIcon
-                            variant="filled"
-                            color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
-                            size="sm"
-                            style={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              zIndex: 10,
-                              backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleFeatured(instance.id);
-                            }}
-                          >
-                            {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-                          </ActionIcon>
+                          {userRole !== 'partner' && (
+                            <ActionIcon
+                              variant="filled"
+                              color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
+                              size="sm"
+                              style={{
+                                position: 'absolute',
+                                top: 8,
+                                right: 8,
+                                zIndex: 10,
+                                backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleFeatured(instance.id);
+                              }}
+                            >
+                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                            </ActionIcon>
+                          )}
                           {instance.features.length > 0 && (
                             <Box
                               style={{

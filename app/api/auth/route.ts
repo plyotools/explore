@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isAuthenticated, setAuthenticated, clearAuthentication, verifyPassword, isAdmin } from '@/app/lib/auth';
+import { isAuthenticated, setAuthenticated, clearAuthentication, verifyPassword, getUserRole } from '@/app/lib/auth';
 
 // Note: API routes don't work with static export, but removing dynamic export allows build to succeed
 // These routes will only work in development mode
@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
     
     const result = verifyPassword(password);
     if (result.valid) {
-      await setAuthenticated(result.isAdmin);
-      return NextResponse.json({ success: true, isAdmin: result.isAdmin });
+      await setAuthenticated(result.role);
+      return NextResponse.json({ success: true, role: result.role, isAdmin: result.role === 'admin' });
     } else {
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
@@ -29,11 +29,11 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const authenticated = await isAuthenticated();
-    const admin = authenticated ? await isAdmin() : false;
-    return NextResponse.json({ authenticated, isAdmin: admin });
+    const role = authenticated ? await getUserRole() : 'viewer';
+    return NextResponse.json({ authenticated, role, isAdmin: role === 'admin' });
   } catch (error) {
     console.error('Auth check error:', error);
-    return NextResponse.json({ authenticated: false, isAdmin: false, error: 'Failed to check authentication' }, { status: 500 });
+    return NextResponse.json({ authenticated: false, role: 'viewer', isAdmin: false, error: 'Failed to check authentication' }, { status: 500 });
   }
 }
 
