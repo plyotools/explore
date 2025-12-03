@@ -81,7 +81,7 @@ export default function LoginPage() {
     try {
       if (process.env.NODE_ENV !== 'production') {
         // Try real API auth when running with a server
-        const response = await fetch('/api/auth/', {
+        const response = await fetch(`${basePath}/api/auth/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password }),

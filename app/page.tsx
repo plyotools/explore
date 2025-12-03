@@ -987,11 +987,13 @@ export default function HomePage() {
         setCheckingAuth(false);
       } else {
         // Not authenticated, redirect immediately
-        window.location.replace('/login');
+        const basePath = typeof window !== 'undefined' ? (window.location.pathname.startsWith('/explore') ? '/explore' : '') : '';
+        window.location.replace(`${basePath}/login`);
       }
     } catch (error) {
       // On error or timeout, redirect immediately
-      window.location.replace('/login');
+      const basePath = typeof window !== 'undefined' ? (window.location.pathname.startsWith('/explore') ? '/explore' : '') : '';
+      window.location.replace(`${basePath}/login`);
     }
   };
 

@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation';
 import { Container, Paper, Title, TextInput, PasswordInput, Button, Alert } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 
+function getBasePath(): string {
+  if (typeof window === 'undefined') return '';
+  return window.location.pathname.startsWith('/explore') ? '/explore' : '';
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [password, setPassword] = useState('');
@@ -16,8 +21,10 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
+    const basePath = getBasePath();
+
     try {
-      const response = await fetch('/api/auth/', {
+      const response = await fetch(`${basePath}/api/auth/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
@@ -26,8 +33,8 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        router.push('/');
-        router.refresh();
+        const redirectPath = basePath || '/';
+        window.location.href = redirectPath;
       } else {
         setError(data.error || 'Invalid password');
       }
