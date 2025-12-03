@@ -31,3 +31,14 @@ export interface FeatureColorMap {
   [featureName: string]: string;
 }
 
+export interface Client {
+  name: string;
+  logo?: string; // base64 or file path
+  favicon?: string; // URL or file path
+  website?: string; // URL to fetch favicon from
+}
+
+export interface ClientConfig {
+  [clientName: string]: Client;
+}
+

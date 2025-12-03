@@ -128,6 +128,16 @@ export default function RootLayout({
           [data-mantine-color-scheme="dark"] .mantine-Select-option:hover {
             background-color: #2A275D !important;
           }
+          @keyframes pulse {
+            0%, 100% {
+              opacity: 1;
+              transform: scale(1);
+            }
+            50% {
+              opacity: 0.7;
+              transform: scale(1.1);
+            }
+          }
         ` }} />
       </head>
       <body style={{ fontFamily: 'Roboto, sans-serif', backgroundColor: '#0A082D', minHeight: '100vh' }}>

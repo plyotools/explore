@@ -1,10 +1,12 @@
-import { ExploreInstance, FeatureConfig, FeatureWithColor } from './types';
+import { ExploreInstance, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './types';
 import { promises as fs } from 'fs';
 import path from 'path';
 
 const PROJECTS_DIR = path.join(process.cwd(), 'public', 'projects');
 const FEATURES_FILE = path.join(process.cwd(), 'data', 'features.json');
 const FEATURES_PUBLIC_FILE = path.join(process.cwd(), 'public', 'data', 'features.json');
+const CLIENTS_FILE = path.join(process.cwd(), 'data', 'clients.json');
+const CLIENTS_PUBLIC_FILE = path.join(process.cwd(), 'public', 'data', 'clients.json');
 const INDEX_FILE = path.join(process.cwd(), 'public', 'instances.json');
 
 // Calculate color lightness (0-1, where 0 is black and 1 is white)
@@ -52,6 +54,8 @@ async function ensureDirectories() {
   await fs.mkdir(PROJECTS_DIR, { recursive: true });
   await fs.mkdir(path.dirname(FEATURES_FILE), { recursive: true });
   await fs.mkdir(path.dirname(FEATURES_PUBLIC_FILE), { recursive: true });
+  await fs.mkdir(path.dirname(CLIENTS_FILE), { recursive: true });
+  await fs.mkdir(path.dirname(CLIENTS_PUBLIC_FILE), { recursive: true });
 }
 
 // Get project directory path
@@ -359,6 +363,59 @@ export async function cleanupInvalidFeatures(): Promise<{ cleaned: number; remov
   }
   
   return { cleaned, removed: totalRemoved };
+}
+
+// Get clients configuration
+export async function getClients(): Promise<ClientConfig> {
+  try {
+    await ensureDirectories();
+    const content = await fs.readFile(CLIENTS_FILE, 'utf-8');
+    const data = JSON.parse(content);
+    return data;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // File doesn't exist, create default empty config
+      const defaultClients: ClientConfig = {};
+      await fs.mkdir(path.dirname(CLIENTS_PUBLIC_FILE), { recursive: true });
+      await Promise.all([
+        fs.writeFile(CLIENTS_FILE, JSON.stringify(defaultClients, null, 2), 'utf-8'),
+        fs.writeFile(CLIENTS_PUBLIC_FILE, JSON.stringify(defaultClients, null, 2), 'utf-8'),
+      ]);
+      return defaultClients;
+    }
+    console.error('Error fetching clients:', error);
+    return {};
+  }
+}
+
+// Update clients configuration
+export async function updateClients(clients: ClientConfig): Promise<void> {
+  await ensureDirectories();
+  await fs.mkdir(path.dirname(CLIENTS_PUBLIC_FILE), { recursive: true });
+  // Write to both locations
+  await Promise.all([
+    fs.writeFile(CLIENTS_FILE, JSON.stringify(clients, null, 2), 'utf-8'),
+    fs.writeFile(CLIENTS_PUBLIC_FILE, JSON.stringify(clients, null, 2), 'utf-8'),
+  ]);
+}
+
+// Save client logo image
+export async function saveClientLogo(clientName: string, logoData: string): Promise<string> {
+  await ensureDirectories();
+  const clientsDir = path.join(process.cwd(), 'public', 'data', 'clients');
+  await fs.mkdir(clientsDir, { recursive: true });
+  
+  // Handle base64 data URL
+  if (logoData.startsWith('data:')) {
+    const base64Data = logoData.split(',')[1];
+    const matches = logoData.match(/data:image\/(\w+);base64/);
+    const extension = matches ? matches[1] : 'png';
+    const logoPath = path.join(clientsDir, `${clientName.replace(/[^a-zA-Z0-9]/g, '-')}.${extension}`);
+    await fs.writeFile(logoPath, base64Data, 'base64');
+    return `/data/clients/${clientName.replace(/[^a-zA-Z0-9]/g, '-')}.${extension}`;
+  }
+  
+  return logoData; // Already a path
 }
 
 // Regenerate instances.json index file

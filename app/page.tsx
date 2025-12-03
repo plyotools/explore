@@ -26,8 +26,22 @@ import {
   Popover,
   ScrollArea,
 } from '@mantine/core';
-import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch } from '@tabler/icons-react';
-import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor } from './lib/types';
+
+// Add pulsating animation
+const pulseKeyframes = `
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.1);
+    }
+  }
+`;
+import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding } from '@tabler/icons-react';
+import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './lib/types';
 
 // Icon Picker Component
 function IconPickerContent({ 
@@ -101,6 +115,8 @@ export default function HomePage() {
   const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [authenticated, setAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [basePath, setBasePath] = useState<string>('');
   
   // Admin form state
@@ -130,6 +146,13 @@ export default function HomePage() {
   const [editingPalette, setEditingPalette] = useState<string[]>([]);
   const [iconPickerOpen, setIconPickerOpen] = useState<Record<string, boolean>>({});
   const [iconSearchTerm, setIconSearchTerm] = useState<Record<string, string>>({});
+  const [clients, setClients] = useState<ClientConfig>({});
+  const [clientsModalOpened, setClientsModalOpened] = useState(false);
+  const [editingClients, setEditingClients] = useState<ClientConfig>({});
+  const [editingClientName, setEditingClientName] = useState<string>('');
+  const [editingClientWebsite, setEditingClientWebsite] = useState<string>('');
+  const [editingClientLogo, setEditingClientLogo] = useState<string>('');
+  const [fetchingFavicon, setFetchingFavicon] = useState<string | null>(null);
 
   // Helper function to get icon for a feature name - memoized with useCallback
   const getFeatureIcon = useCallback((featureName: string): string | undefined => {
@@ -153,11 +176,18 @@ export default function HomePage() {
   const getColorLightness = useCallback((color: string): number => {
     // Remove # if present
     const hex = color.replace('#', '');
+    if (hex.length !== 6) return 0.5; // Default to medium if invalid
+    
     const r = parseInt(hex.substr(0, 2), 16);
     const g = parseInt(hex.substr(2, 2), 16);
     const b = parseInt(hex.substr(4, 2), 16);
-    // Calculate relative luminance (perceived brightness)
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Calculate relative luminance using WCAG formula for better accuracy
+    const [rs, gs, bs] = [r, g, b].map(val => {
+      val = val / 255;
+      return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+    });
+    const luminance = 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
     return luminance;
   }, []);
 
@@ -183,8 +213,7 @@ export default function HomePage() {
   const loadFeatureColors = async () => {
     try {
       const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-      const cacheBuster = `?t=${Date.now()}`;
-      const response = await fetch(`${basePath}/data/feature-colors.json${cacheBuster}`);
+      const response = await fetch(`${basePath}/data/feature-colors.json`, { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         setFeatureColors(data);
@@ -210,24 +239,29 @@ export default function HomePage() {
   };
 
   // Calculate if a color is dark or light - memoized
+  // Using 0.5 threshold - values below are dark (use white text), above are light (use dark text)
   const isColorDark = useCallback((color: string): boolean => {
-    return getColorLightness(color) < 0.5;
+    if (!color) return false;
+    const lightness = getColorLightness(color);
+    // Lower threshold to ensure bright colors get dark text
+    return lightness < 0.45;
   }, [getColorLightness]);
 
   useEffect(() => {
-    // Load instances first (this controls the loading state)
-    loadInstances();
-    // Load other data in parallel (these don't block the UI)
-    loadFeatures();
-    checkAuth();
-    loadColorPalette();
+    // Load all data in parallel for better performance
+    Promise.all([
+      loadInstances(),
+      loadFeatures(),
+      checkAuth(),
+      loadColorPalette(),
+      loadClients(),
+    ]).catch(console.error);
   }, []);
 
   const loadColorPalette = async () => {
     try {
       const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-      const cacheBuster = `?t=${Date.now()}`;
-      const response = await fetch(`${basePath}/data/color-palette.json${cacheBuster}`);
+      const response = await fetch(`${basePath}/data/color-palette.json`, { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -260,31 +294,108 @@ export default function HomePage() {
     }
   };
 
-  useEffect(() => {
-    // Refresh instances periodically (less frequently for better performance)
-    const interval = setInterval(() => {
-      loadInstances();
-    }, 30000); // Refresh every 30 seconds instead of 5
-    return () => clearInterval(interval);
-  }, []);
+  const loadClients = async (): Promise<ClientConfig | null> => {
+    try {
+      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+      const response = await fetch(`${basePath}/data/clients.json`, { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        setClients(data);
+        return data;
+      } else if (response.status === 404) {
+        // File doesn't exist yet, return empty object
+        const emptyClients: ClientConfig = {};
+        setClients(emptyClients);
+        return emptyClients;
+      }
+    } catch (error) {
+      console.error('Failed to load clients:', error);
+      // Return empty object on error so modal can still open
+      const emptyClients: ClientConfig = {};
+      setClients(emptyClients);
+      return emptyClients;
+    }
+    // Return empty object instead of null
+    const emptyClients: ClientConfig = {};
+    setClients(emptyClients);
+    return emptyClients;
+  };
+
+  const saveClients = async (clientsToSave: ClientConfig, logoData?: { clientName: string; logoData: string }) => {
+    try {
+      const response = await fetch('/api/clients', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clients: clientsToSave, clientLogo: logoData }),
+      });
+      if (response.ok) {
+        await loadClients();
+        setClientsModalOpened(false);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to save clients');
+      }
+    } catch (error) {
+      console.error('Failed to save clients:', error);
+      alert('Failed to save clients');
+    }
+  };
+
+  const fetchFavicon = async (url: string) => {
+    if (!url) return;
+    setFetchingFavicon(url);
+    try {
+      const response = await fetch('/api/clients/favicon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await response.json();
+      if (response.ok && data.favicon) {
+        setEditingClientLogo(data.favicon);
+      } else {
+        alert('Could not fetch favicon. You can paste an image instead.');
+      }
+    } catch (error) {
+      console.error('Failed to fetch favicon:', error);
+      alert('Failed to fetch favicon. You can paste an image instead.');
+    } finally {
+      setFetchingFavicon(null);
+    }
+  };
+
+  // Removed periodic refresh - only refresh on user actions for better performance
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/auth/');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+      
+      const response = await fetch('/api/auth/', {
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
       const data = await response.json();
       if (data.authenticated) {
         setAuthenticated(true);
+        setIsAdmin(data.isAdmin || false);
+        setCheckingAuth(false);
+      } else {
+        // Not authenticated, redirect immediately
+        window.location.replace('/login');
       }
     } catch (error) {
-      console.error('Failed to check auth:', error);
+      // On error or timeout, redirect immediately
+      window.location.replace('/login');
     }
   };
 
   const loadFeatures = async (): Promise<FeatureConfig | null> => {
     try {
       const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-      const cacheBuster = `?t=${Date.now()}`;
-      const response = await fetch(`${basePath}/data/features.json${cacheBuster}`);
+      const response = await fetch(`${basePath}/data/features.json`, { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         
@@ -340,6 +451,8 @@ export default function HomePage() {
   const handleLogout = async () => {
     await fetch('/api/auth/', { method: 'DELETE' });
     setAuthenticated(false);
+    setIsAdmin(false);
+    router.push('/login');
   };
 
   // Removed handleFileChange - only paste is supported now
@@ -407,7 +520,6 @@ export default function HomePage() {
           body: JSON.stringify({ id: editingId, ...instanceData }),
         });
         if (response.ok) {
-          await new Promise(resolve => setTimeout(resolve, 100));
           await loadInstances();
           setModalOpened(false);
           resetForm();
@@ -419,7 +531,6 @@ export default function HomePage() {
           body: JSON.stringify(instanceData),
         });
         if (response.ok) {
-          await new Promise(resolve => setTimeout(resolve, 100));
           await loadInstances();
           setModalOpened(false);
           resetForm();
@@ -438,7 +549,6 @@ export default function HomePage() {
         method: 'DELETE',
       });
       if (response.ok) {
-        await new Promise(resolve => setTimeout(resolve, 100));
         await loadInstances();
       }
     } catch (error) {
@@ -451,21 +561,19 @@ export default function HomePage() {
       // Use relative path that works with basePath
       const currentBasePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
       setBasePath(currentBasePath);
-      // Add cache-busting parameter to ensure fresh data
-      const cacheBuster = `?t=${Date.now()}`;
+      // Remove cache-busting for better performance - use cache headers instead
       // Ensure we have a leading slash
       const instancesPath = currentBasePath ? `${currentBasePath}/instances.json` : '/instances.json';
-      const url = `${instancesPath}${cacheBuster}`;
+      const url = instancesPath;
       
       let response: Response;
       try {
-        response = await fetch(url);
+        response = await fetch(url, { cache: 'no-store' });
       } catch (fetchError) {
         // Network error, try alternative path
         if (currentBasePath) {
-          const altUrl = `/instances.json${cacheBuster}`;
           try {
-            response = await fetch(altUrl);
+            response = await fetch('/instances.json', { cache: 'no-store' });
           } catch {
             throw new Error('Failed to fetch instances: Network error');
           }
@@ -476,9 +584,8 @@ export default function HomePage() {
       
       if (!response.ok) {
         // Try alternative path without basePath
-        if (currentBasePath && url !== `/instances.json${cacheBuster}`) {
-          const altUrl = `/instances.json${cacheBuster}`;
-          const altResponse = await fetch(altUrl);
+        if (currentBasePath) {
+          const altResponse = await fetch('/instances.json', { cache: 'no-store' });
           if (altResponse.ok) {
             response = altResponse;
           } else {
@@ -628,10 +735,28 @@ export default function HomePage() {
     return result;
   }, [filteredInstances, groupBy1, groupBy2]);
 
+  // Show loading state while checking authentication
+  if (checkingAuth) {
+    return (
+      <Container size="fluid" py="xl" px="md">
+        <div>Loading...</div>
+      </Container>
+    );
+  }
+
+  // If not authenticated, redirect immediately (no delay)
+  if (!authenticated && !checkingAuth) {
+    // Use replace instead of href to avoid adding to history
+    if (typeof window !== 'undefined') {
+      window.location.replace('/login');
+    }
+    return null;
+  }
+
   // Show loading state only if we have no instances and are still loading
   if (loading && instances.length === 0) {
     return (
-      <Container size="xl" py="xl">
+      <Container size="fluid" py="xl" px="md">
         <div>Loading...</div>
       </Container>
     );
@@ -640,7 +765,7 @@ export default function HomePage() {
   // Removed excessive logging - only log on actual changes
 
   return (
-    <Container size="xl" py="xl">
+    <Container size="fluid" py="xl" px="md">
       <Box pos="relative" mb="xl">
         <Group gap="sm" align="center" mb="xl">
           <svg width="18" height="22" viewBox="0 0 9 11" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -651,33 +776,22 @@ export default function HomePage() {
           </Title>
         </Group>
         <Group gap="md" style={{ position: 'absolute', top: 0, right: 0 }}>
-          {authenticated ? (
-            <Text
-              component="a"
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                handleLogout();
-              }}
-              style={{ cursor: 'pointer', textDecoration: 'none' }}
-              size="sm"
-            >
-              Log out
-            </Text>
-          ) : (
-            <Text
-              component="a"
-              href="/admin/login"
-              style={{ textDecoration: 'none' }}
-              size="sm"
-            >
-              Log in
-            </Text>
-          )}
+          <Text
+            component="a"
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              handleLogout();
+            }}
+            style={{ cursor: 'pointer', textDecoration: 'none' }}
+            size="sm"
+          >
+            Log out
+          </Text>
         </Group>
       </Box>
 
-      {authenticated && (
+      {isAdmin && (
         <Group mb="xl" gap="sm">
           <Button
             leftSection={<IconPlus size={16} />}
@@ -731,6 +845,19 @@ export default function HomePage() {
           >
             Colors
           </Button>
+          <Button
+            variant="light"
+            color="purple"
+            leftSection={<IconBuilding size={16} />}
+            onClick={async () => {
+              const loadedClients = await loadClients();
+              setEditingClients(loadedClients || {});
+              setClientsModalOpened(true);
+            }}
+            size="sm"
+          >
+            Clients
+          </Button>
         </Group>
       )}
 
@@ -764,6 +891,17 @@ export default function HomePage() {
                 onChange={setClientFilter}
                 clearable
                 style={{ maxWidth: 220 }}
+                styles={{
+                  input: {
+                    color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="Filter by feature"
@@ -772,6 +910,17 @@ export default function HomePage() {
                 onChange={setSelectedFeature}
                 clearable
                 style={{ maxWidth: 260 }}
+                styles={{
+                  input: {
+                    color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="All statuses"
@@ -785,6 +934,17 @@ export default function HomePage() {
                   setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
                 }
                 style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.8) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="Group by..."
@@ -800,6 +960,17 @@ export default function HomePage() {
                   if (value === groupBy2) setGroupBy2('none');
                 }}
                 style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.8) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               {groupBy1 !== 'none' && (
                 <Select
@@ -815,6 +986,18 @@ export default function HomePage() {
                     setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
                   }
                   style={{ maxWidth: 160 }}
+                  styles={{
+                    input: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                    placeholder: {
+                      color: 'var(--mantine-color-dimmed) !important',
+                      opacity: 0.7,
+                    },
+                    value: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                  }}
                 />
               )}
             </Group>
@@ -833,11 +1016,12 @@ export default function HomePage() {
                       <Badge ml="sm" size="sm" variant="light">{groupInstances.length}</Badge>
                     </Title>
                   )}
-                  <Grid>
-                    {groupInstances.map((instance) => (
-                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4 }}>
+                  <Grid gutter="md">
+                    {groupInstances.map((instance, index) => (
+                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
                         <Card 
-                      shadow="sm" 
+                      shadow="sm"
+                      style={{ maxWidth: 480, width: '100%' }} 
                       padding={0} 
                       radius="md" 
                       withBorder 
@@ -871,9 +1055,22 @@ export default function HomePage() {
                           }}
                         >
                           <Image
-                            src={instance.screenshot || (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
+                            src={(instance.screenshot && instance.screenshot.trim()) ? (basePath && !instance.screenshot.startsWith(basePath) ? `${basePath}${instance.screenshot}` : instance.screenshot) : (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
                             alt={instance.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', backgroundColor: 'var(--mantine-color-gray-1)' }}
+                            loading={index < 6 ? 'eager' : 'lazy'}
+                            decoding="async"
+                            fetchPriority={index < 3 ? 'high' : 'auto'}
+                            onError={(e) => {
+                              // Fallback to placeholder if screenshot fails to load
+                              const target = e.target as HTMLImageElement;
+                              const placeholderSrc = basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE;
+                              // Only retry once to avoid infinite loop
+                              if (!target.dataset.retried && target.src !== placeholderSrc) {
+                                target.dataset.retried = 'true';
+                                target.src = placeholderSrc;
+                              }
+                            }}
                           />
                           {instance.features.length > 0 && (
                             <Box
@@ -904,9 +1101,11 @@ export default function HomePage() {
                                       key={feature} 
                                       size="sm" 
                                       variant="light" 
-                                      style={{ 
-                                        backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)', 
-                                        color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white'
+                                      styles={{
+                                        root: {
+                                          backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
+                                          color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
+                                        },
                                       }}
                                       leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
                                     >
@@ -922,33 +1121,40 @@ export default function HomePage() {
                           <Stack gap="sm">
                             <Group justify="space-between" align="center">
                               <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                                <Group gap={6} align="center">
-                                  <Box
-                                    w={8}
-                                    h={8}
-                                    style={{
-                                      borderRadius: '50%',
-                                      backgroundColor: instance.active === false ? '#868e96' : '#40c057',
-                                      flexShrink: 0,
-                                    }}
-                                    title={instance.active === false ? 'Inactive' : 'Active'}
-                                  />
-                                  <Title order={4} style={{ flex: 1 }}>
+                                <Group gap={6} align="center" wrap="nowrap">
+                                  <Title order={4} style={{ flex: 1, minWidth: 0 }}>
                                     {instance.name}
                                   </Title>
+                                  <Badge
+                                    size="sm"
+                                    variant="light"
+                                    color={instance.active === false ? 'gray' : 'green'}
+                                    style={{
+                                      animation: 'pulse 2s ease-in-out infinite',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {instance.active === false ? 'Inactive' : 'Active'}
+                                  </Badge>
                                 </Group>
                                 {instance.client && (
-                                  <Text size="xs" c="dimmed">
-                                    {instance.client}
-                                  </Text>
+                                  <Group gap={8} align="center">
+                                    {clients[instance.client]?.logo && (
+                                      <Image
+                                        src={clients[instance.client].logo}
+                                        alt={instance.client}
+                                        width={16}
+                                        height={16}
+                                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                      />
+                                    )}
+                                    <Text size="xs" c="dimmed">
+                                      {instance.client}
+                                    </Text>
+                                  </Group>
                                 )}
                               </Stack>
-                              {instance.active === false && (
-                                <Badge color="gray" variant="light" size="sm">
-                                  Inactive
-                                </Badge>
-                              )}
-                              {authenticated && (
+                              {isAdmin && (
                                 <ActionIcon
                                   variant="subtle"
                                   color="purple"
@@ -1010,6 +1216,17 @@ export default function HomePage() {
                 onChange={setClientFilter}
                 clearable
                 style={{ maxWidth: 220 }}
+                styles={{
+                  input: {
+                    color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="Filter by feature"
@@ -1018,6 +1235,17 @@ export default function HomePage() {
                 onChange={setSelectedFeature}
                 clearable
                 style={{ maxWidth: 260 }}
+                styles={{
+                  input: {
+                    color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="All statuses"
@@ -1031,6 +1259,17 @@ export default function HomePage() {
                   setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
                 }
                 style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.8) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="Group by..."
@@ -1046,6 +1285,17 @@ export default function HomePage() {
                   if (value === groupBy2) setGroupBy2('none');
                 }}
                 style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.8) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               {groupBy1 !== 'none' && (
                 <Select
@@ -1061,6 +1311,18 @@ export default function HomePage() {
                     setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
                   }
                   style={{ maxWidth: 160 }}
+                  styles={{
+                    input: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                    placeholder: {
+                      color: 'var(--mantine-color-dimmed) !important',
+                      opacity: 0.7,
+                    },
+                    value: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                  }}
                 />
               )}
             </Group>
@@ -1079,11 +1341,12 @@ export default function HomePage() {
                       <Badge ml="sm" size="sm" variant="light">{groupInstances.length}</Badge>
                     </Title>
                   )}
-                  <Grid>
-                    {groupInstances.map((instance) => (
-                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4 }}>
+                  <Grid gutter="md">
+                    {groupInstances.map((instance, index) => (
+                      <Grid.Col key={instance.id} span="content">
                         <Card 
-                      shadow="sm" 
+                      shadow="sm"
+                      style={{ maxWidth: 480, width: '100%' }} 
                       padding={0} 
                       radius="md" 
                       withBorder 
@@ -1117,9 +1380,22 @@ export default function HomePage() {
                           }}
                         >
                           <Image
-                            src={instance.screenshot || (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
+                            src={(instance.screenshot && instance.screenshot.trim()) ? (basePath && !instance.screenshot.startsWith(basePath) ? `${basePath}${instance.screenshot}` : instance.screenshot) : (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
                             alt={instance.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', backgroundColor: 'var(--mantine-color-gray-1)' }}
+                            loading={index < 6 ? 'eager' : 'lazy'}
+                            decoding="async"
+                            fetchPriority={index < 3 ? 'high' : 'auto'}
+                            onError={(e) => {
+                              // Fallback to placeholder if screenshot fails to load
+                              const target = e.target as HTMLImageElement;
+                              const placeholderSrc = basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE;
+                              // Only retry once to avoid infinite loop
+                              if (!target.dataset.retried && target.src !== placeholderSrc) {
+                                target.dataset.retried = 'true';
+                                target.src = placeholderSrc;
+                              }
+                            }}
                           />
                           {instance.features.length > 0 && (
                             <Box
@@ -1150,9 +1426,11 @@ export default function HomePage() {
                                       key={feature} 
                                       size="sm" 
                                       variant="light" 
-                                      style={{ 
-                                        backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)', 
-                                        color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white'
+                                      styles={{
+                                        root: {
+                                          backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
+                                          color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
+                                        },
                                       }}
                                       leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
                                     >
@@ -1168,33 +1446,40 @@ export default function HomePage() {
                           <Stack gap="sm">
                             <Group justify="space-between" align="center">
                               <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                                <Group gap={6} align="center">
-                                  <Box
-                                    w={8}
-                                    h={8}
-                                    style={{
-                                      borderRadius: '50%',
-                                      backgroundColor: instance.active === false ? '#868e96' : '#40c057',
-                                      flexShrink: 0,
-                                    }}
-                                    title={instance.active === false ? 'Inactive' : 'Active'}
-                                  />
-                                  <Title order={4} style={{ flex: 1 }}>
+                                <Group gap={6} align="center" wrap="nowrap">
+                                  <Title order={4} style={{ flex: 1, minWidth: 0 }}>
                                     {instance.name}
                                   </Title>
+                                  <Badge
+                                    size="sm"
+                                    variant="light"
+                                    color={instance.active === false ? 'gray' : 'green'}
+                                    style={{
+                                      animation: 'pulse 2s ease-in-out infinite',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {instance.active === false ? 'Inactive' : 'Active'}
+                                  </Badge>
                                 </Group>
                                 {instance.client && (
-                                  <Text size="xs" c="dimmed">
-                                    {instance.client}
-                                  </Text>
+                                  <Group gap={8} align="center">
+                                    {clients[instance.client]?.logo && (
+                                      <Image
+                                        src={clients[instance.client].logo}
+                                        alt={instance.client}
+                                        width={16}
+                                        height={16}
+                                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                      />
+                                    )}
+                                    <Text size="xs" c="dimmed">
+                                      {instance.client}
+                                    </Text>
+                                  </Group>
                                 )}
                               </Stack>
-                              {instance.active === false && (
-                                <Badge color="gray" variant="light" size="sm">
-                                  Inactive
-                                </Badge>
-                              )}
-                              {authenticated && (
+                              {isAdmin && (
                                 <ActionIcon
                                   variant="subtle"
                                   color="purple"
@@ -1256,6 +1541,17 @@ export default function HomePage() {
                 onChange={setClientFilter}
                 clearable
                 style={{ maxWidth: 220 }}
+                styles={{
+                  input: {
+                    color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="Filter by feature"
@@ -1264,6 +1560,17 @@ export default function HomePage() {
                 onChange={setSelectedFeature}
                 clearable
                 style={{ maxWidth: 260 }}
+                styles={{
+                  input: {
+                    color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.5) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="All statuses"
@@ -1277,6 +1584,17 @@ export default function HomePage() {
                   setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
                 }
                 style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.8) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               <Select
                 placeholder="Group by..."
@@ -1292,6 +1610,17 @@ export default function HomePage() {
                   if (value === groupBy2) setGroupBy2('none');
                 }}
                 style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                  placeholder: {
+                    color: 'rgba(255, 255, 255, 0.8) !important',
+                  },
+                  value: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
               />
               {groupBy1 !== 'none' && (
                 <Select
@@ -1307,6 +1636,18 @@ export default function HomePage() {
                     setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
                   }
                   style={{ maxWidth: 160 }}
+                  styles={{
+                    input: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                    placeholder: {
+                      color: 'var(--mantine-color-dimmed) !important',
+                      opacity: 0.7,
+                    },
+                    value: {
+                      color: 'var(--mantine-color-text) !important',
+                    },
+                  }}
                 />
               )}
             </Group>
@@ -1325,11 +1666,12 @@ export default function HomePage() {
                       <Badge ml="sm" size="sm" variant="light">{groupInstances.length}</Badge>
                     </Title>
                   )}
-                  <Grid>
-                    {groupInstances.map((instance) => (
-                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4 }}>
+                  <Grid gutter="md">
+                    {groupInstances.map((instance, index) => (
+                      <Grid.Col key={instance.id} span="content">
                         <Card 
-                      shadow="sm" 
+                      shadow="sm"
+                      style={{ maxWidth: 480, width: '100%' }} 
                       padding={0} 
                       radius="md" 
                       withBorder 
@@ -1363,9 +1705,22 @@ export default function HomePage() {
                           }}
                         >
                           <Image
-                            src={instance.screenshot || (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
+                            src={(instance.screenshot && instance.screenshot.trim()) ? (basePath && !instance.screenshot.startsWith(basePath) ? `${basePath}${instance.screenshot}` : instance.screenshot) : (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
                             alt={instance.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', backgroundColor: 'var(--mantine-color-gray-1)' }}
+                            loading={index < 6 ? 'eager' : 'lazy'}
+                            decoding="async"
+                            fetchPriority={index < 3 ? 'high' : 'auto'}
+                            onError={(e) => {
+                              // Fallback to placeholder if screenshot fails to load
+                              const target = e.target as HTMLImageElement;
+                              const placeholderSrc = basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE;
+                              // Only retry once to avoid infinite loop
+                              if (!target.dataset.retried && target.src !== placeholderSrc) {
+                                target.dataset.retried = 'true';
+                                target.src = placeholderSrc;
+                              }
+                            }}
                           />
                           {instance.features.length > 0 && (
                             <Box
@@ -1396,9 +1751,11 @@ export default function HomePage() {
                                       key={feature} 
                                       size="sm" 
                                       variant="light" 
-                                      style={{ 
-                                        backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)', 
-                                        color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white'
+                                      styles={{
+                                        root: {
+                                          backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
+                                          color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
+                                        },
                                       }}
                                       leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
                                     >
@@ -1414,33 +1771,40 @@ export default function HomePage() {
                           <Stack gap="sm">
                             <Group justify="space-between" align="center">
                               <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                                <Group gap={6} align="center">
-                                  <Box
-                                    w={8}
-                                    h={8}
-                                    style={{
-                                      borderRadius: '50%',
-                                      backgroundColor: instance.active === false ? '#868e96' : '#40c057',
-                                      flexShrink: 0,
-                                    }}
-                                    title={instance.active === false ? 'Inactive' : 'Active'}
-                                  />
-                                  <Title order={4} style={{ flex: 1 }}>
+                                <Group gap={6} align="center" wrap="nowrap">
+                                  <Title order={4} style={{ flex: 1, minWidth: 0 }}>
                                     {instance.name}
                                   </Title>
+                                  <Badge
+                                    size="sm"
+                                    variant="light"
+                                    color={instance.active === false ? 'gray' : 'green'}
+                                    style={{
+                                      animation: 'pulse 2s ease-in-out infinite',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {instance.active === false ? 'Inactive' : 'Active'}
+                                  </Badge>
                                 </Group>
                                 {instance.client && (
-                                  <Text size="xs" c="dimmed">
-                                    {instance.client}
-                                  </Text>
+                                  <Group gap={8} align="center">
+                                    {clients[instance.client]?.logo && (
+                                      <Image
+                                        src={clients[instance.client].logo}
+                                        alt={instance.client}
+                                        width={16}
+                                        height={16}
+                                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                      />
+                                    )}
+                                    <Text size="xs" c="dimmed">
+                                      {instance.client}
+                                    </Text>
+                                  </Group>
                                 )}
                               </Stack>
-                              {instance.active === false && (
-                                <Badge color="gray" variant="light" size="sm">
-                                  Inactive
-                                </Badge>
-                              )}
-                              {authenticated && (
+                              {isAdmin && (
                                 <ActionIcon
                                   variant="subtle"
                                   color="purple"
@@ -2232,6 +2596,194 @@ export default function HomePage() {
                 return;
               }
               await saveColorPalette(validPalette);
+            }}>
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={clientsModalOpened}
+        onClose={() => {
+          setClientsModalOpened(false);
+          setEditingClientName('');
+          setEditingClientWebsite('');
+          setEditingClientLogo('');
+        }}
+        title="Manage Clients"
+        size="lg"
+      >
+        <Stack gap="xl">
+          <Box>
+            <Title order={4} mb="md">Clients</Title>
+            <Stack gap="xs">
+              {Object.entries(editingClients).map(([clientName, client]) => {
+                const projectCount = instances.filter(i => i.client === clientName).length;
+                return (
+                  <Group key={clientName} gap="sm" align="center" p="sm" style={{ border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px' }}>
+                    {client.logo && (
+                      <Image
+                        src={client.logo}
+                        alt={clientName}
+                        width={32}
+                        height={32}
+                        style={{ borderRadius: '4px', objectFit: 'cover' }}
+                      />
+                    )}
+                    <Box style={{ flex: 1 }}>
+                      <Text fw={500}>{clientName}</Text>
+                      <Text size="xs" c="dimmed">{projectCount} project{projectCount !== 1 ? 's' : ''}</Text>
+                    </Box>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      onClick={() => {
+                        setClientFilter(clientName);
+                        setClientsModalOpened(false);
+                      }}
+                    >
+                      View
+                    </Button>
+                    <ActionIcon
+                      color="red"
+                      variant="subtle"
+                      onClick={() => {
+                        const newClients = { ...editingClients };
+                        delete newClients[clientName];
+                        setEditingClients(newClients);
+                      }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  </Group>
+                );
+              })}
+              {Object.keys(editingClients).length === 0 && (
+                <Text c="dimmed" ta="center" py="md">No clients yet. Add one below.</Text>
+              )}
+            </Stack>
+          </Box>
+
+          <Box>
+            <Title order={4} mb="md">Add/Edit Client</Title>
+            <Stack gap="md">
+              <TextInput
+                label="Client Name"
+                placeholder="Enter client name"
+                value={editingClientName}
+                onChange={(e) => setEditingClientName(e.currentTarget.value)}
+              />
+              <TextInput
+                label="Website URL (for favicon)"
+                placeholder="https://example.com"
+                value={editingClientWebsite}
+                onChange={(e) => setEditingClientWebsite(e.currentTarget.value)}
+              />
+              <Group>
+                <Button
+                  size="sm"
+                  variant="light"
+                  onClick={() => fetchFavicon(editingClientWebsite)}
+                  disabled={!editingClientWebsite || fetchingFavicon === editingClientWebsite}
+                  loading={fetchingFavicon === editingClientWebsite}
+                >
+                  Fetch Favicon
+                </Button>
+                <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+                  Or paste an image (PNG) below
+                </Text>
+              </Group>
+              <Box
+                onPaste={(e) => {
+                  const items = e.clipboardData.items;
+                  for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                      const blob = items[i].getAsFile();
+                      if (blob) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          if (event.target?.result) {
+                            setEditingClientLogo(event.target.result as string);
+                          }
+                        };
+                        reader.readAsDataURL(blob);
+                      }
+                      break;
+                    }
+                  }
+                }}
+                style={{
+                  border: '2px dashed rgba(255, 255, 255, 0.3)',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  textAlign: 'center',
+                  cursor: 'text',
+                  minHeight: '100px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {editingClientLogo ? (
+                  <Image
+                    src={editingClientLogo}
+                    alt="Client logo"
+                    width={100}
+                    height={100}
+                    style={{ borderRadius: '4px', objectFit: 'contain' }}
+                  />
+                ) : (
+                  <Text size="sm" c="dimmed">Paste image here (Ctrl/Cmd + V)</Text>
+                )}
+              </Box>
+              <Group justify="flex-end">
+                <Button
+                  variant="light"
+                  onClick={() => {
+                    setEditingClientName('');
+                    setEditingClientWebsite('');
+                    setEditingClientLogo('');
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!editingClientName) {
+                      alert('Please enter a client name');
+                      return;
+                    }
+                    const newClients = { ...editingClients };
+                    newClients[editingClientName] = {
+                      name: editingClientName,
+                      logo: editingClientLogo || undefined,
+                      website: editingClientWebsite || undefined,
+                    };
+                    setEditingClients(newClients);
+                    setEditingClientName('');
+                    setEditingClientWebsite('');
+                    setEditingClientLogo('');
+                  }}
+                  disabled={!editingClientName}
+                >
+                  Add Client
+                </Button>
+              </Group>
+            </Stack>
+          </Box>
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="light" onClick={() => {
+              setClientsModalOpened(false);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={async () => {
+              await saveClients(editingClients, editingClientLogo && editingClientName ? {
+                clientName: editingClientName,
+                logoData: editingClientLogo,
+              } : undefined);
             }}>
               Save
             </Button>

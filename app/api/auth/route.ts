@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isAuthenticated, setAuthenticated, clearAuthentication, verifyPassword } from '@/app/lib/auth';
+import { isAuthenticated, setAuthenticated, clearAuthentication, verifyPassword, isAdmin } from '@/app/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,9 +12,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password required' }, { status: 400 });
     }
     
-    if (verifyPassword(password)) {
-      await setAuthenticated();
-      return NextResponse.json({ success: true });
+    const result = verifyPassword(password);
+    if (result.valid) {
+      await setAuthenticated(result.isAdmin);
+      return NextResponse.json({ success: true, isAdmin: result.isAdmin });
     } else {
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
@@ -27,10 +28,11 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const authenticated = await isAuthenticated();
-    return NextResponse.json({ authenticated });
+    const admin = authenticated ? await isAdmin() : false;
+    return NextResponse.json({ authenticated, isAdmin: admin });
   } catch (error) {
     console.error('Auth check error:', error);
-    return NextResponse.json({ authenticated: false, error: 'Failed to check authentication' }, { status: 500 });
+    return NextResponse.json({ authenticated: false, isAdmin: false, error: 'Failed to check authentication' }, { status: 500 });
   }
 }
 
