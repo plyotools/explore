@@ -40,7 +40,7 @@ const pulseKeyframes = `
     }
   }
 `;
-import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding } from '@tabler/icons-react';
+import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled } from '@tabler/icons-react';
 import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './lib/types';
 
 // Icon Picker Component
@@ -112,6 +112,8 @@ export default function HomePage() {
   const [selectedFeature, setSelectedFeature] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [clientFilter, setClientFilter] = useState<string | null>(null);
+  const [featuredFilter, setFeaturedFilter] = useState<'all' | 'featured'>('all');
+  const [featuredInstances, setFeaturedInstances] = useState<Set<string>>(new Set());
   const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [authenticated, setAuthenticated] = useState(false);
@@ -247,6 +249,43 @@ export default function HomePage() {
     return lightness < 0.45;
   }, [getColorLightness]);
 
+  // Load featured instances from localStorage
+  const loadFeaturedInstances = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('featuredInstances');
+        if (stored) {
+          setFeaturedInstances(new Set(JSON.parse(stored)));
+        }
+      } catch (error) {
+        console.error('Error loading featured instances:', error);
+      }
+    }
+  };
+
+  // Save featured instances to localStorage
+  const saveFeaturedInstances = (featured: Set<string>) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('featuredInstances', JSON.stringify(Array.from(featured)));
+        setFeaturedInstances(featured);
+      } catch (error) {
+        console.error('Error saving featured instances:', error);
+      }
+    }
+  };
+
+  // Toggle featured status for an instance
+  const toggleFeatured = (instanceId: string) => {
+    const newFeatured = new Set(featuredInstances);
+    if (newFeatured.has(instanceId)) {
+      newFeatured.delete(instanceId);
+    } else {
+      newFeatured.add(instanceId);
+    }
+    saveFeaturedInstances(newFeatured);
+  };
+
   useEffect(() => {
     // Load all data in parallel for better performance
     Promise.all([
@@ -256,6 +295,7 @@ export default function HomePage() {
       loadColorPalette(),
       loadClients(),
     ]).catch(console.error);
+    loadFeaturedInstances();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -664,9 +704,10 @@ export default function HomePage() {
       if (statusFilter === 'active' && instance.active === false) return false;
       if (statusFilter === 'inactive' && instance.active !== false) return false;
       if (clientFilter && (instance.client || '').trim() !== clientFilter) return false;
+      if (featuredFilter === 'featured' && !featuredInstances.has(instance.id)) return false;
       return true;
     });
-  }, [instances, activeTab, selectedFeature, statusFilter, clientFilter]);
+  }, [instances, activeTab, selectedFeature, statusFilter, clientFilter, featuredFilter, featuredInstances]);
 
   const clientOptions = useMemo(() => {
     const clients = Array.from(
@@ -953,6 +994,23 @@ export default function HomePage() {
                 }}
               />
               <Select
+                placeholder="Featured"
+                data={[
+                  { value: 'all', label: 'All' },
+                  { value: 'featured', label: 'Featured' },
+                ]}
+                value={featuredFilter}
+                onChange={(value) => {
+                  setFeaturedFilter((value as 'all' | 'featured') || 'all');
+                }}
+                style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
+              />
+              <Select
                 placeholder="Group by..."
                 data={[
                   { value: 'none', label: 'No grouping' },
@@ -1066,6 +1124,25 @@ export default function HomePage() {
                               }
                             }}
                           />
+                          <ActionIcon
+                            variant="filled"
+                            color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
+                            size="sm"
+                            style={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              zIndex: 10,
+                              backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleFeatured(instance.id);
+                            }}
+                          >
+                            {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                          </ActionIcon>
                           {instance.features.length > 0 && (
                             <Box
                               style={{
@@ -1251,6 +1328,23 @@ export default function HomePage() {
                 }}
               />
               <Select
+                placeholder="Featured"
+                data={[
+                  { value: 'all', label: 'All' },
+                  { value: 'featured', label: 'Featured' },
+                ]}
+                value={featuredFilter}
+                onChange={(value) => {
+                  setFeaturedFilter((value as 'all' | 'featured') || 'all');
+                }}
+                style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
+              />
+              <Select
                 placeholder="Group by..."
                 data={[
                   { value: 'none', label: 'No grouping' },
@@ -1364,6 +1458,25 @@ export default function HomePage() {
                               }
                             }}
                           />
+                          <ActionIcon
+                            variant="filled"
+                            color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
+                            size="sm"
+                            style={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              zIndex: 10,
+                              backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleFeatured(instance.id);
+                            }}
+                          >
+                            {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                          </ActionIcon>
                           {instance.features.length > 0 && (
                             <Box
                               style={{
@@ -1549,6 +1662,23 @@ export default function HomePage() {
                 }}
               />
               <Select
+                placeholder="Featured"
+                data={[
+                  { value: 'all', label: 'All' },
+                  { value: 'featured', label: 'Featured' },
+                ]}
+                value={featuredFilter}
+                onChange={(value) => {
+                  setFeaturedFilter((value as 'all' | 'featured') || 'all');
+                }}
+                style={{ maxWidth: 160 }}
+                styles={{
+                  input: {
+                    color: 'var(--mantine-color-text) !important',
+                  },
+                }}
+              />
+              <Select
                 placeholder="Group by..."
                 data={[
                   { value: 'none', label: 'No grouping' },
@@ -1662,6 +1792,25 @@ export default function HomePage() {
                               }
                             }}
                           />
+                          <ActionIcon
+                            variant="filled"
+                            color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
+                            size="sm"
+                            style={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              zIndex: 10,
+                              backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleFeatured(instance.id);
+                            }}
+                          >
+                            {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                          </ActionIcon>
                           {instance.features.length > 0 && (
                             <Box
                               style={{

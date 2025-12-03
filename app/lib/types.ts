@@ -13,6 +13,8 @@ export interface ExploreInstance {
   // Active status - true = Active, false = Inactive
   // Older entries without this field should be treated as active by default
   active?: boolean;
+  // Featured flag - can be toggled by viewers
+  featured?: boolean;
   createdAt: string;
 }
 
