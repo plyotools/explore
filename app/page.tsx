@@ -368,6 +368,29 @@ export default function HomePage() {
   // Removed periodic refresh - only refresh on user actions for better performance
 
   const checkAuth = async () => {
+    // For static export environments (e.g. GitHub Pages) we can't use API routes.
+    // Instead, rely on a simple client-side session stored in localStorage.
+    if (typeof window !== 'undefined') {
+      const basePath = window.location.pathname.startsWith('/explore') ? '/explore' : '';
+
+      if (process.env.NODE_ENV === 'production') {
+        const session = window.localStorage.getItem('explore_session');
+        const adminFlag = window.localStorage.getItem('explore_is_admin') === 'true';
+
+        if (session === 'authenticated') {
+          setAuthenticated(true);
+          setIsAdmin(adminFlag);
+          setCheckingAuth(false);
+          return;
+        }
+
+        // Not authenticated in production static export – send to login under correct base path
+        window.location.replace(`${basePath}/login`);
+        return;
+      }
+    }
+
+    // Development / server mode: use real API auth
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
