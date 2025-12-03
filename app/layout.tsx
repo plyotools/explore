@@ -12,10 +12,18 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Get basePath for favicon links (works in both dev and production)
+  // For static export, basePath is set in next.config.js
+  const basePath = process.env.NODE_ENV === 'production' ? '/explore' : '';
+  
   return (
     <html lang="en">
       <head>
         <ColorSchemeScript />
+        <link rel="icon" type="image/x-icon" href={`${basePath}/favicon.ico`} />
+        <link rel="icon" type="image/png" sizes="32x32" href={`${basePath}/favicon-32x32.png`} />
+        <link rel="icon" type="image/png" sizes="16x16" href={`${basePath}/favicon-16x16.png`} />
+        <link rel="apple-touch-icon" sizes="180x180" href={`${basePath}/apple-touch-icon.png`} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
