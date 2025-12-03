@@ -788,6 +788,9 @@ export default function HomePage() {
 
   // Removed excessive logging - only log on actual changes
 
+  // Calculate basePath for images (screenshots, logos, etc.)
+  const basePath = typeof window !== 'undefined' && window.location.pathname.startsWith('/explore') ? '/explore' : '';
+
   return (
     <Container size="fluid" py="xl" px="md">
       <Box pos="relative" mb="xl">
@@ -1135,7 +1138,7 @@ export default function HomePage() {
                                   <Group gap={8} align="center">
                                     {clients[instance.client]?.logo && (
                                       <Image
-                                        src={clients[instance.client].logo}
+                                        src={basePath && !clients[instance.client].logo.startsWith(basePath) ? `${basePath}${clients[instance.client].logo}` : clients[instance.client].logo}
                                         alt={instance.client}
                                         width={16}
                                         height={16}
@@ -1430,7 +1433,7 @@ export default function HomePage() {
                                   <Group gap={8} align="center">
                                     {clients[instance.client]?.logo && (
                                       <Image
-                                        src={clients[instance.client].logo}
+                                        src={basePath && !clients[instance.client].logo.startsWith(basePath) ? `${basePath}${clients[instance.client].logo}` : clients[instance.client].logo}
                                         alt={instance.client}
                                         width={16}
                                         height={16}
@@ -1725,7 +1728,7 @@ export default function HomePage() {
                                   <Group gap={8} align="center">
                                     {clients[instance.client]?.logo && (
                                       <Image
-                                        src={clients[instance.client].logo}
+                                        src={basePath && !clients[instance.client].logo.startsWith(basePath) ? `${basePath}${clients[instance.client].logo}` : clients[instance.client].logo}
                                         alt={instance.client}
                                         width={16}
                                         height={16}
@@ -2558,7 +2561,7 @@ export default function HomePage() {
                   <Group key={clientName} gap="sm" align="center" p="sm" style={{ border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px' }}>
                     {client.logo && (
                       <Image
-                        src={client.logo}
+                        src={basePath && !client.logo.startsWith(basePath) ? `${basePath}${client.logo}` : client.logo}
                         alt={clientName}
                         width={32}
                         height={32}
