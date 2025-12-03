@@ -48,7 +48,7 @@ const pulseKeyframes = `
     border: none !important;
   }
 `;
-import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck, IconDotsVertical } from '@tabler/icons-react';
+import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck, IconDotsVertical, IconDownload, IconUpload, IconDatabaseOff } from '@tabler/icons-react';
 import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './lib/types';
 
 // Icon Picker Component
@@ -542,6 +542,30 @@ function FilterTag({
 // Placeholder image path for projects without screenshots
 const PLACEHOLDER_IMAGE = '/placeholder.png';
 
+// Helper function to normalize logo paths for basePath (GitHub Pages)
+function normalizeLogoPath(logo: string | undefined, basePath: string): string | undefined {
+  if (!logo) return undefined;
+  
+  // Don't modify data URIs or external URLs
+  if (logo.startsWith('data:') || logo.startsWith('http')) {
+    return logo;
+  }
+  
+  // If logo already includes basePath, return as-is
+  if (basePath && logo.startsWith(basePath)) {
+    return logo;
+  }
+  
+  // If logo starts with absolute path like /data/clients/..., add basePath prefix
+  // Only if basePath is set (not empty)
+  if (logo.startsWith('/') && basePath && basePath !== '') {
+    return `${basePath}${logo}`;
+  }
+  
+  // Otherwise return as-is
+  return logo;
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [instances, setInstances] = useState<ExploreInstance[]>([]);
@@ -561,8 +585,9 @@ export default function HomePage() {
   const statusFilterRef = useRef<FilterDropdownRef>(null);
   const starredFilterRef = useRef<FilterDropdownRef>(null);
   const [featuredInstances, setFeaturedInstances] = useState<Set<string>>(new Set());
-  const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
-  const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
+  // TODO: RESTORE GROUPING FEATURE - Commented out for now, flag for future restore
+  // const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
+  // const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [authenticated, setAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userRole, setUserRole] = useState<'viewer' | 'admin' | 'partner'>('viewer');
@@ -608,6 +633,9 @@ export default function HomePage() {
   const [mergeModalOpened, setMergeModalOpened] = useState(false);
   const [clientToRemove, setClientToRemove] = useState<string | null>(null);
   const [mergeTargetClient, setMergeTargetClient] = useState<string | null>(null);
+  const [importModalOpened, setImportModalOpened] = useState(false);
+  const [deleteAllModalOpened, setDeleteAllModalOpened] = useState(false);
+  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState('');
 
   // Shared styles for filter dropdowns (text-link style)
   const filterDropdownStyles = {
@@ -734,41 +762,81 @@ export default function HomePage() {
     return lightness < 0.45;
   }, [getColorLightness]);
 
-  // Load featured instances from localStorage
-  const loadFeaturedInstances = () => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('featuredInstances');
-        if (stored) {
-          setFeaturedInstances(new Set(JSON.parse(stored)));
+  // Load featured instances from server (or public file for static export)
+  const loadFeaturedInstances = async () => {
+    try {
+      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+      
+      // Try API first
+      let response = await fetch(`${basePath}/api/featured-instances`, { cache: 'no-store' });
+      
+      // If API fails, try public file (for static export)
+      if (!response.ok && basePath) {
+        try {
+          response = await fetch(`${basePath}/data/featured-instances.json`, { cache: 'no-store' });
+        } catch {
+          // Try without basePath
+          response = await fetch('/data/featured-instances.json', { cache: 'no-store' });
         }
-      } catch (error) {
-        console.error('Error loading featured instances:', error);
+      } else if (!response.ok) {
+        response = await fetch('/data/featured-instances.json', { cache: 'no-store' });
       }
+      
+      if (response.ok) {
+        const data = await response.json();
+        setFeaturedInstances(new Set(Array.isArray(data) ? data : []));
+      } else {
+        // If both fail, use empty set
+        setFeaturedInstances(new Set());
+      }
+    } catch (error) {
+      console.error('Error loading featured instances:', error);
+      setFeaturedInstances(new Set());
     }
   };
 
-  // Save featured instances to localStorage
-  const saveFeaturedInstances = (featured: Set<string>) => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('featuredInstances', JSON.stringify(Array.from(featured)));
+  // Save featured instances to server (only for admins/viewers)
+  const saveFeaturedInstances = async (featured: Set<string>) => {
+    // Only allow admins and viewers to save
+    if (userRole === 'partner') {
+      return;
+    }
+    
+    try {
+      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+      const response = await fetch(`${basePath}/api/featured-instances`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceIds: Array.from(featured) }),
+      });
+      
+      if (response.ok) {
         setFeaturedInstances(featured);
-      } catch (error) {
-        console.error('Error saving featured instances:', error);
+      } else {
+        const error = await response.json();
+        console.error('Failed to save featured instances:', error);
+        alert(`Failed to save featured instances: ${error.error || 'Unknown error'}`);
       }
+    } catch (error) {
+      console.error('Error saving featured instances:', error);
+      alert(`Failed to save featured instances: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   // Toggle featured status for an instance
-  const toggleFeatured = (instanceId: string) => {
+  const toggleFeatured = async (instanceId: string) => {
+    // Only allow admins and viewers to toggle
+    if (userRole === 'partner') {
+      return;
+    }
+    
     const newFeatured = new Set(featuredInstances);
     if (newFeatured.has(instanceId)) {
       newFeatured.delete(instanceId);
     } else {
       newFeatured.add(instanceId);
     }
-    saveFeaturedInstances(newFeatured);
+    await saveFeaturedInstances(newFeatured);
   };
 
   useEffect(() => {
@@ -779,8 +847,8 @@ export default function HomePage() {
       checkAuth(),
       loadColorPalette(),
       loadClients(),
+      loadFeaturedInstances(),
     ]).catch(console.error);
-    loadFeaturedInstances();
   }, []);
 
   const loadColorPalette = async () => {
@@ -1216,8 +1284,21 @@ export default function HomePage() {
 
   const loadInstances = async () => {
     try {
-      // Use relative path that works with basePath
-      const currentBasePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+      // Determine basePath - check if we're on GitHub Pages
+      let currentBasePath = '';
+      if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        const pathname = window.location.pathname;
+        
+        // If on GitHub Pages (plyotools.github.io), always use /explore
+        if (hostname === 'plyotools.github.io') {
+          currentBasePath = '/explore';
+        } else if (pathname.startsWith('/explore')) {
+          currentBasePath = '/explore';
+        } else {
+          currentBasePath = pathname.replace(/\/$/, '');
+        }
+      }
       setBasePath(currentBasePath);
       // Remove cache-busting for better performance - use cache headers instead
       // Ensure we have a leading slash
@@ -1368,11 +1449,7 @@ export default function HomePage() {
     
     return clientNames.map((c) => {
       const clientLogo = clients[c]?.logo;
-      const logoPath = clientLogo 
-        ? (basePath && !clientLogo.startsWith(basePath) && !clientLogo.startsWith('http') && !clientLogo.startsWith('data:') 
-            ? `${basePath}${clientLogo}` 
-            : clientLogo)
-        : undefined;
+      const logoPath = normalizeLogoPath(clientLogo, basePath);
       const count = baseFiltered.filter(i => (i.client || '').trim() === c).length;
       return { value: c, label: `${c} (${count})`, image: logoPath };
     });
@@ -1469,64 +1546,70 @@ export default function HomePage() {
   }, [groupedFeatures]);
 
 
+  // TODO: RESTORE GROUPING FEATURE - Commented out for now, flag for future restore
   // Grouping logic
-  const getGroupKey = (instance: ExploreInstance, groupBy: 'client' | 'status' | 'feature'): string => {
-    if (groupBy === 'client') {
-      return instance.client || '';
-    }
-    if (groupBy === 'status') {
-      return instance.active === false ? 'Inactive' : 'Active';
-    }
-    if (groupBy === 'feature') {
-      // Group by first feature, or "All" if none
-      return instance.features.length > 0 ? instance.features[0] : 'All';
-    }
-    return '';
-  };
+  // const getGroupKey = (instance: ExploreInstance, groupBy: 'client' | 'status' | 'feature'): string => {
+  //   if (groupBy === 'client') {
+  //     return instance.client || '';
+  //   }
+  //   if (groupBy === 'status') {
+  //     return instance.active === false ? 'Inactive' : 'Active';
+  //   }
+  //   if (groupBy === 'feature') {
+  //     // Group by first feature, or "All" if none
+  //     return instance.features.length > 0 ? instance.features[0] : 'All';
+  //   }
+  //   return '';
+  // };
 
-  const groupedInstances = useMemo(() => {
-    if (groupBy1 === 'none') {
-      return { '': filteredInstances };
-    }
+  // const groupedInstances = useMemo(() => {
+  //   if (groupBy1 === 'none') {
+  //     return { '': filteredInstances };
+  //   }
 
-    const groups: Record<string, ExploreInstance[]> = {};
+  //   const groups: Record<string, ExploreInstance[]> = {};
     
-    for (const instance of filteredInstances) {
-      const key1 = getGroupKey(instance, groupBy1);
+  //   for (const instance of filteredInstances) {
+  //     const key1 = getGroupKey(instance, groupBy1);
       
-      if (groupBy2 === 'none') {
-        if (!groups[key1]) groups[key1] = [];
-        groups[key1].push(instance);
-      } else {
-        // Two-level grouping
-        const key2 = getGroupKey(instance, groupBy2);
-        const combinedKey = `${key1} | ${key2}`;
-        if (!groups[combinedKey]) groups[combinedKey] = [];
-        groups[combinedKey].push(instance);
-      }
-    }
+  //     if (groupBy2 === 'none') {
+  //       if (!groups[key1]) groups[key1] = [];
+  //       groups[key1].push(instance);
+  //     } else {
+  //       // Two-level grouping
+  //       const key2 = getGroupKey(instance, groupBy2);
+  //       const combinedKey = `${key1} | ${key2}`;
+  //       if (!groups[combinedKey]) groups[combinedKey] = [];
+  //       groups[combinedKey].push(instance);
+  //     }
+  //   }
 
-    // Sort group keys
-    const sortedKeys = Object.keys(groups).sort((a, b) => {
-      if (groupBy1 === 'status') {
-        // Status: Active first
-        if (a.includes('Active') && b.includes('Inactive')) return -1;
-        if (a.includes('Inactive') && b.includes('Active')) return 1;
-      }
-      if (groupBy1 === 'client') {
-        // Client: "No Client" first, then alphabetical
-        if (a === '' && b !== '') return -1;
-        if (a !== '' && b === '') return 1;
-      }
-      return a.localeCompare(b);
-    });
+  //   // Sort group keys
+  //   const sortedKeys = Object.keys(groups).sort((a, b) => {
+  //     if (groupBy1 === 'status') {
+  //       // Status: Active first
+  //       if (a.includes('Active') && b.includes('Inactive')) return -1;
+  //       if (a.includes('Inactive') && b.includes('Active')) return 1;
+  //     }
+  //     if (groupBy1 === 'client') {
+  //       // Client: "No Client" first, then alphabetical
+  //       if (a === '' && b !== '') return -1;
+  //       if (a !== '' && b === '') return 1;
+  //     }
+  //     return a.localeCompare(b);
+  //   });
 
-    const result: Record<string, ExploreInstance[]> = {};
-    for (const key of sortedKeys) {
-      result[key] = groups[key];
-    }
-    return result;
-  }, [filteredInstances, groupBy1, groupBy2]);
+  //   const result: Record<string, ExploreInstance[]> = {};
+  //   for (const key of sortedKeys) {
+  //     result[key] = groups[key];
+  //   }
+  //   return result;
+  // }, [filteredInstances, groupBy1, groupBy2]);
+
+  // Use filteredInstances directly instead of groupedInstances (grouping disabled)
+  const groupedInstances = useMemo(() => {
+    return { '': filteredInstances } as Record<string, ExploreInstance[]>;
+  }, [filteredInstances]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1564,20 +1647,22 @@ export default function HomePage() {
       if (e.key === 'o' || e.key === 'O') {
         e.preventDefault();
         // Get all instances in display order (from groupedInstances)
+        // TODO: RESTORE GROUPING FEATURE - When restoring, uncomment the sorting logic below
         const instancesInOrder: ExploreInstance[] = [];
-        const sortedGroupKeys = Object.keys(groupedInstances).sort((a, b) => {
-          if (groupBy1 === 'status') {
-            if (a.includes('Active') && b.includes('Inactive')) return -1;
-            if (a.includes('Inactive') && b.includes('Active')) return 1;
-          }
-          if (groupBy1 === 'client') {
-            if (a === '' && b !== '') return -1;
-            if (a !== '' && b === '') return 1;
-          }
-          return a.localeCompare(b);
-        });
+        // const sortedGroupKeys = Object.keys(groupedInstances).sort((a, b) => {
+        //   if (groupBy1 === 'status') {
+        //     if (a.includes('Active') && b.includes('Inactive')) return -1;
+        //     if (a.includes('Inactive') && b.includes('Active')) return 1;
+        //   }
+        //   if (groupBy1 === 'client') {
+        //     if (a === '' && b !== '') return -1;
+        //     if (a !== '' && b === '') return 1;
+        //   }
+        //   return a.localeCompare(b);
+        // });
         
-        for (const key of sortedGroupKeys) {
+        // Simplified: just use all instances from groupedInstances (which is now just filteredInstances)
+        for (const key of Object.keys(groupedInstances)) {
           instancesInOrder.push(...groupedInstances[key]);
         }
         
@@ -1605,7 +1690,7 @@ export default function HomePage() {
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [groupedInstances, groupBy1]);
+  }, [groupedInstances]); // TODO: RESTORE GROUPING FEATURE - Add groupBy1 back when restoring
 
   // Show loading state while checking authentication
   if (checkingAuth) {
@@ -1714,6 +1799,58 @@ export default function HomePage() {
                 >
                   Clients
                 </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item
+                  leftSection={<IconDownload size={16} />}
+                  onClick={async () => {
+                    try {
+                      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+                      const response = await fetch(`${basePath}/api/export`);
+                      if (response.ok) {
+                        const data = await response.json();
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `explore-backup-${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        alert('Export completed successfully!');
+                      } else {
+                        alert('Failed to export data');
+                      }
+                    } catch (error) {
+                      console.error('Export error:', error);
+                      alert('Failed to export data');
+                    }
+                  }}
+                >
+                  Export All Data
+                </Menu.Item>
+                {isAdmin && (
+                  <>
+                    <Menu.Item
+                      leftSection={<IconUpload size={16} />}
+                      onClick={() => {
+                        setImportModalOpened(true);
+                      }}
+                    >
+                      Import Data
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<IconDatabaseOff size={16} />}
+                      color="red"
+                      onClick={() => {
+                        setDeleteAllModalOpened(true);
+                        setDeleteAllConfirmText('');
+                      }}
+                    >
+                      Delete Everything
+                    </Menu.Item>
+                  </>
+                )}
               </Menu.Dropdown>
             </Menu>
             </>
@@ -1821,7 +1958,8 @@ export default function HomePage() {
                 />
               )}
             </Group>
-            <Group gap="sm" align="flex-end" wrap="wrap">
+            {/* TODO: RESTORE GROUPING FEATURE - Commented out for now, flag for future restore */}
+            {/* <Group gap="sm" align="flex-end" wrap="wrap">
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1859,7 +1997,7 @@ export default function HomePage() {
                   styles={filterDropdownStyles}
                 />
               )}
-            </Group>
+            </Group> */}
           </Group>
         )}
             {/* Filter Tags Row */}
@@ -1921,72 +2059,24 @@ export default function HomePage() {
                 })}
               </Group>
             )}
+            {/* TODO: RESTORE GROUPING FEATURE - Simplified rendering since grouping is disabled */}
             {Object.keys(groupedInstances).length > 0 ? (
               Object.keys(groupedInstances).length === 1 ? (
-                // Single group: render without accordion
+                // Single group: render without accordion (grouping disabled, so just show filteredInstances)
                 (() => {
                   const [groupKey, groupInstances] = Object.entries(groupedInstances)[0];
                   const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                  let displayKey = groupKey;
-                  let clientName: string | null = null;
-                  
-                  if (groupKey.includes(' | ')) {
-                    const parts = groupKey.split(' | ');
-                    if (groupBy1 === 'client' && parts[0]) {
-                      clientName = parts[0];
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    } else if (groupBy2 === 'client' && parts[1]) {
-                      clientName = parts[1];
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    } else {
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    }
-                  } else {
-                    if (groupBy1 === 'client') {
-                      clientName = groupKey || null;
-                      displayKey = groupKey || 'No Client';
-                    } else {
-                      displayKey = groupKey || 'All Projects';
-                    }
-                  }
-                  
-                  const clientLogo = clientName && clients[clientName]?.logo;
-                  const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
                   
                   return (
-                    <Stack gap="md">
-                      {displayKey !== 'All Projects' && groupKey !== '' && (
-                        <Group gap="sm" align="center">
-                          <Text fw={500} size="lg">
-                            {groupKey.includes(' | ') ? (
-                              <>
-                                {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                              </>
-                            ) : (
-                              displayKey
-                            )}
-                          </Text>
-                          {logoPath && (
-                            <Image
-                              src={logoPath}
-                              alt={clientName || ''}
-                              width={24}
-                              height={24}
-                              style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
-                            />
-                          )}
-                          <Badge size="sm" variant="light">{groupInstances.length}</Badge>
-                        </Group>
-                      )}
-                      <Box
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                          gap: '16px',
-                          width: '100%',
-                        }}
-                      >
-                        {groupInstances.map((instance, index) => (
+                    <Box
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                        gap: '16px',
+                        width: '100%',
+                      }}
+                    >
+                      {groupInstances.map((instance, index) => (
                           <Card
                             key={instance.id} 
                       shadow="sm"
@@ -2171,10 +2261,10 @@ export default function HomePage() {
                             {instance.client && (
                               <Group gap={8} align="center">
                                 {clients[instance.client]?.logo && (() => {
-                                  const logoPath = clients[instance.client]!.logo!;
+                                  const logoPath = normalizeLogoPath(clients[instance.client]!.logo!, basePath);
                                   return (
                                     <Image
-                                      src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                      src={logoPath!}
                                       alt={instance.client}
                                       width={16}
                                       height={16}
@@ -2209,11 +2299,11 @@ export default function HomePage() {
                         </Card>
                         ))}
                       </Box>
-                    </Stack>
-                  );
-                })()
+                    );
+                  })()
               ) : (
-                // Multiple groups: use accordion
+                // TODO: RESTORE GROUPING FEATURE - Accordion for multiple groups (currently disabled since grouping is off)
+                // Multiple groups: use accordion (this won't be used since groupedInstances is always { '': filteredInstances })
                 <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
                   {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
                     const accordionValue = groupKey || `group-${index}`;
@@ -2226,28 +2316,33 @@ export default function HomePage() {
                             let displayKey = groupKey;
                             let clientName: string | null = null;
                             
-                            if (groupKey.includes(' | ')) {
-                              const parts = groupKey.split(' | ');
-                              if (groupBy1 === 'client' && parts[0]) {
-                                clientName = parts[0];
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              } else if (groupBy2 === 'client' && parts[1]) {
-                                clientName = parts[1];
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              } else {
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              }
-                            } else {
-                              if (groupBy1 === 'client') {
-                                clientName = groupKey || null;
-                                displayKey = groupKey || 'No Client';
-                              } else {
-                                displayKey = groupKey || 'All Projects';
-                              }
-                            }
+                            // TODO: RESTORE GROUPING FEATURE - This code handles grouped display, currently disabled
+                            // Since groupedInstances is now just { '': filteredInstances }, groupKey will always be ''
+                            // if (groupKey.includes(' | ')) {
+                            //   const parts = groupKey.split(' | ');
+                            //   if (groupBy1 === 'client' && parts[0]) {
+                            //     clientName = parts[0];
+                            //     displayKey = `${parts[0]} → ${parts[1]}`;
+                            //   } else if (groupBy2 === 'client' && parts[1]) {
+                            //     clientName = parts[1];
+                            //     displayKey = `${parts[0]} → ${parts[1]}`;
+                            //   } else {
+                            //     displayKey = `${parts[0]} → ${parts[1]}`;
+                            //   }
+                            // } else {
+                            //   if (groupBy1 === 'client') {
+                            //     clientName = groupKey || null;
+                            //     displayKey = groupKey || 'No Client';
+                            //   } else {
+                            //     displayKey = groupKey;
+                            //   }
+                            // }
+                            // Simplified: no grouping, so just use empty string
+                            displayKey = '';
+                            clientName = null;
                             
                             const clientLogo = clientName && clients[clientName]?.logo;
-                            const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+                            const logoPath = normalizeLogoPath(clientLogo || undefined, basePath);
                             
                             if (displayKey === 'All Projects' || groupKey === '') {
                               return null;
@@ -2477,10 +2572,10 @@ export default function HomePage() {
                                       {instance.client && (
                                         <Group gap={8} align="center">
                                           {clients[instance.client]?.logo && (() => {
-                                            const logoPath = clients[instance.client]!.logo!;
+                                            const logoPath = normalizeLogoPath(clients[instance.client]!.logo!, basePath);
                                             return (
                                               <Image
-                                                src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                                src={logoPath!}
                                                 alt={instance.client}
                                                 width={16}
                                                 height={16}
@@ -2573,8 +2668,7 @@ export default function HomePage() {
             {...({
               itemComponent: ({ label, value, ...others }: any) => {
                 const clientLogo = others.logo;
-                const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+                const logoPath = normalizeLogoPath(clientLogo, basePath);
                 
                 return (
                   <Group gap="sm" align="center" {...others}>
@@ -2593,12 +2687,10 @@ export default function HomePage() {
               }
             } as any)}
             leftSection={formClient && clients[formClient]?.logo ? (() => {
-              const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-              const logoPath = clients[formClient]!.logo!;
-              const fullLogoPath = basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath;
+              const logoPath = normalizeLogoPath(clients[formClient]!.logo!, basePath);
               return (
                 <Image
-                  src={fullLogoPath}
+                  src={logoPath!}
                   alt={formClient}
                   width={20}
                   height={20}
@@ -3355,7 +3447,7 @@ export default function HomePage() {
                       {client.logo ? (
                         <>
                           <Image
-                            src={basePath && !client.logo.startsWith(basePath) ? `${basePath}${client.logo}` : client.logo}
+                            src={normalizeLogoPath(client.logo, basePath)!}
                             alt={clientName}
                             width={32}
                             height={32}
