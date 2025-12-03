@@ -142,7 +142,17 @@ export default function LoginPage() {
       backgroundColor: '#0A082D'
     }}>
       <Container size={420} style={{ width: '100%', maxWidth: '420px' }}>
-        <Paper withBorder shadow="md" p={30} radius="md" style={{ width: '100%' }}>
+        <Paper 
+          withBorder 
+          shadow="md" 
+          p={30} 
+          radius="md" 
+          style={{ 
+            width: '100%',
+            backgroundColor: '#19191B',
+            borderColor: 'rgba(255, 255, 255, 0.1)'
+          }}
+        >
           <Title order={2} ta="center" mb="md" style={{ color: '#F0F2F9' }}>
             Login
           </Title>
@@ -165,8 +175,30 @@ export default function LoginPage() {
               required
               mb="md"
               autoFocus
+              styles={{
+                label: {
+                  color: '#F0F2F9',
+                  marginBottom: '8px'
+                },
+                input: {
+                  backgroundColor: '#1F1D4D',
+                  color: '#F0F2F9',
+                  borderColor: '#403B7D',
+                },
+                wrapper: {
+                  marginBottom: '16px'
+                }
+              }}
             />
-            <Button type="submit" fullWidth loading={loading}>
+            <Button 
+              type="submit" 
+              fullWidth 
+              loading={loading}
+              style={{
+                backgroundColor: '#8027F4',
+                color: '#FFFFFF'
+              }}
+            >
               Login
             </Button>
           </form>
