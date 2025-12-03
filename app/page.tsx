@@ -256,6 +256,7 @@ export default function HomePage() {
       loadColorPalette(),
       loadClients(),
     ]).catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadColorPalette = async () => {
@@ -895,12 +896,6 @@ export default function HomePage() {
                   input: {
                     color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
                   },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
                 }}
               />
               <Select
@@ -913,12 +908,6 @@ export default function HomePage() {
                 styles={{
                   input: {
                     color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -936,12 +925,6 @@ export default function HomePage() {
                 style={{ maxWidth: 160 }}
                 styles={{
                   input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.8) !important',
-                  },
-                  value: {
                     color: 'var(--mantine-color-text) !important',
                   },
                 }}
@@ -964,12 +947,6 @@ export default function HomePage() {
                   input: {
                     color: 'var(--mantine-color-text) !important',
                   },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.8) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
                 }}
               />
               {groupBy1 !== 'none' && (
@@ -988,13 +965,6 @@ export default function HomePage() {
                   style={{ maxWidth: 160 }}
                   styles={{
                     input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                    placeholder: {
-                      color: 'var(--mantine-color-dimmed) !important',
-                      opacity: 0.7,
-                    },
-                    value: {
                       color: 'var(--mantine-color-text) !important',
                     },
                   }}
@@ -1021,7 +991,13 @@ export default function HomePage() {
                       <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
                         <Card 
                       shadow="sm"
-                      style={{ maxWidth: 480, width: '100%' }} 
+                      style={{ 
+                        maxWidth: 480, 
+                        width: '100%',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                        textDecoration: 'none',
+                      }} 
                       padding={0} 
                       radius="md" 
                       withBorder 
@@ -1030,11 +1006,6 @@ export default function HomePage() {
                       href={instance.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{
-                        cursor: 'pointer',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                        textDecoration: 'none',
-                      }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                         e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -1220,12 +1191,6 @@ export default function HomePage() {
                   input: {
                     color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
                   },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
                 }}
               />
               <Select
@@ -1238,12 +1203,6 @@ export default function HomePage() {
                 styles={{
                   input: {
                     color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -1261,12 +1220,6 @@ export default function HomePage() {
                 style={{ maxWidth: 160 }}
                 styles={{
                   input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.8) !important',
-                  },
-                  value: {
                     color: 'var(--mantine-color-text) !important',
                   },
                 }}
@@ -1289,12 +1242,6 @@ export default function HomePage() {
                   input: {
                     color: 'var(--mantine-color-text) !important',
                   },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.8) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
                 }}
               />
               {groupBy1 !== 'none' && (
@@ -1313,13 +1260,6 @@ export default function HomePage() {
                   style={{ maxWidth: 160 }}
                   styles={{
                     input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                    placeholder: {
-                      color: 'var(--mantine-color-dimmed) !important',
-                      opacity: 0.7,
-                    },
-                    value: {
                       color: 'var(--mantine-color-text) !important',
                     },
                   }}
@@ -1346,7 +1286,13 @@ export default function HomePage() {
                       <Grid.Col key={instance.id} span="content">
                         <Card 
                       shadow="sm"
-                      style={{ maxWidth: 480, width: '100%' }} 
+                      style={{ 
+                        maxWidth: 480, 
+                        width: '100%',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                        textDecoration: 'none',
+                      }} 
                       padding={0} 
                       radius="md" 
                       withBorder 
@@ -1355,11 +1301,6 @@ export default function HomePage() {
                       href={instance.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{
-                        cursor: 'pointer',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                        textDecoration: 'none',
-                      }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                         e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -1545,12 +1486,6 @@ export default function HomePage() {
                   input: {
                     color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
                   },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
                 }}
               />
               <Select
@@ -1563,12 +1498,6 @@ export default function HomePage() {
                 styles={{
                   input: {
                     color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.5) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -1586,12 +1515,6 @@ export default function HomePage() {
                 style={{ maxWidth: 160 }}
                 styles={{
                   input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.8) !important',
-                  },
-                  value: {
                     color: 'var(--mantine-color-text) !important',
                   },
                 }}
@@ -1614,12 +1537,6 @@ export default function HomePage() {
                   input: {
                     color: 'var(--mantine-color-text) !important',
                   },
-                  placeholder: {
-                    color: 'rgba(255, 255, 255, 0.8) !important',
-                  },
-                  value: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
                 }}
               />
               {groupBy1 !== 'none' && (
@@ -1638,13 +1555,6 @@ export default function HomePage() {
                   style={{ maxWidth: 160 }}
                   styles={{
                     input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                    placeholder: {
-                      color: 'var(--mantine-color-dimmed) !important',
-                      opacity: 0.7,
-                    },
-                    value: {
                       color: 'var(--mantine-color-text) !important',
                     },
                   }}
@@ -1671,7 +1581,13 @@ export default function HomePage() {
                       <Grid.Col key={instance.id} span="content">
                         <Card 
                       shadow="sm"
-                      style={{ maxWidth: 480, width: '100%' }} 
+                      style={{ 
+                        maxWidth: 480, 
+                        width: '100%',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                        textDecoration: 'none',
+                      }} 
                       padding={0} 
                       radius="md" 
                       withBorder 
@@ -1680,11 +1596,6 @@ export default function HomePage() {
                       href={instance.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{
-                        cursor: 'pointer',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                        textDecoration: 'none',
-                      }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                         e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';

@@ -1,44 +1,59 @@
-# Push to GitHub - Quick Instructions
+# Push Instructions
 
-## Step 1: Create the Repository (if it doesn't exist)
+To push your code to GitHub and deploy:
 
-1. Go to https://github.com/new
-2. Repository name: `explore`
-3. Owner: `plyotools`
-4. Make it **Public** (required for GitHub Pages free tier)
-5. **DO NOT** initialize with README, .gitignore, or license
-6. Click "Create repository"
+## Option 1: Using GitHub CLI (Recommended)
 
-## Step 2: Push Your Code
-
-Run these commands:
+If you have GitHub CLI installed:
 
 ```bash
-cd "/Users/pre/Documents/Cursor/Explore Instances"
-git push -u origin main
+gh auth login
+git push origin main
 ```
 
-If you get authentication errors, you may need to:
-- Use SSH instead: `git remote set-url origin git@github.com:plyotools/explore.git`
-- Or use GitHub CLI: `gh auth login`
+## Option 2: Using Personal Access Token
 
-## Step 3: Enable GitHub Pages
+1. Create a Personal Access Token:
+   - Go to: https://github.com/settings/tokens
+   - Click "Generate new token (classic)"
+   - Select scopes: `repo` (full control of private repositories)
+   - Copy the token
 
-1. Go to: https://github.com/plyotools/explore/settings/pages
-2. Under "Source", select **"GitHub Actions"** (NOT "Deploy from a branch")
-3. Click "Save"
+2. Push using the token:
+   ```bash
+   git push https://YOUR_TOKEN@github.com/plyotools/explore.git main
+   ```
 
-## Step 4: Wait for Deployment
+   Or configure Git credential helper:
+   ```bash
+   git config --global credential.helper osxkeychain  # macOS
+   git push origin main
+   # When prompted, use your GitHub username and the token as password
+   ```
 
-1. Go to: https://github.com/plyotools/explore/actions
-2. You should see a workflow run starting automatically
-3. Wait for it to complete (usually 2-3 minutes)
-4. Once it shows a green checkmark, your site will be live at:
-   **https://plyotools.github.io/explore/**
+## Option 3: Using SSH (if you have SSH keys set up)
 
-## Troubleshooting
+```bash
+git remote set-url origin git@github.com:plyotools/explore.git
+git push origin main
+```
 
-- **404 error persists:** Make sure you selected "GitHub Actions" as the source, not a branch
-- **Workflow fails:** Check the Actions tab for error details
-- **Repository doesn't exist:** Create it first (Step 1)
+## After Pushing
 
+1. **Enable GitHub Pages:**
+   - Go to: https://github.com/plyotools/explore/settings/pages
+   - Under "Source", select **GitHub Actions**
+   - Click "Save"
+
+2. **Check Deployment:**
+   - Go to: https://github.com/plyotools/explore/actions
+   - Wait for the "Deploy to GitHub Pages" workflow to complete
+   - Your site will be live at: https://plyotools.github.io/explore/
+
+## Current Status
+
+- ✅ Remote configured: `https://github.com/plyotools/explore.git`
+- ✅ README updated with live demo link
+- ✅ GitHub Actions workflow configured (`.github/workflows/deploy.yml`)
+- ✅ Build script configured (`scripts/generate-index.js`)
+- ⏳ Waiting for push to GitHub

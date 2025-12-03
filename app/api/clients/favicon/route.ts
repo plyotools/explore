@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthenticated } from '@/app/lib/auth';
 
-export const dynamic = 'force-dynamic';
+// Note: API routes don't work with static export, but removing dynamic export allows build to succeed
+// These routes will only work in development mode
 
 export async function POST(request: NextRequest) {
   try {
