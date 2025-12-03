@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import * as TablerIcons from '@tabler/icons-react';
 import {
@@ -41,7 +41,7 @@ const pulseKeyframes = `
     }
   }
 `;
-import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash } from '@tabler/icons-react';
+import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck } from '@tabler/icons-react';
 import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './lib/types';
 
 // Icon Picker Component
@@ -102,6 +102,373 @@ function IconPickerContent({
   );
 }
 
+// FilterDropdown Component
+function FilterDropdown({
+  label,
+  data,
+  selectedValues,
+  onApply,
+  onClear,
+  placeholder = "Search values",
+  searchPlaceholder = "Search values"
+}: {
+  label: string;
+  data: Array<{ value: string; label: string; image?: string }>;
+  selectedValues: string[];
+  onApply: (values: string[]) => void;
+  onClear: () => void;
+  placeholder?: string;
+  searchPlaceholder?: string;
+}) {
+  const [opened, setOpened] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [pendingValues, setPendingValues] = useState<string[]>(selectedValues);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // Update pending values when selectedValues change externally
+  useEffect(() => {
+    setPendingValues(selectedValues);
+  }, [selectedValues]);
+
+  // Focus input when popover opens
+  useEffect(() => {
+    if (opened && searchInputRef.current) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  }, [opened]);
+
+  // Reset highlighted index when search term or filtered data changes
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [searchTerm, data]);
+
+  const filteredData = useMemo(() => {
+    if (!searchTerm) return data;
+    const searchLower = searchTerm.toLowerCase();
+    return data.filter(item => 
+      item.label.toLowerCase().includes(searchLower) ||
+      item.value.toLowerCase().includes(searchLower)
+    );
+  }, [data, searchTerm]);
+
+  const handleToggle = (value: string) => {
+    setPendingValues(prev => 
+      prev.includes(value) 
+        ? prev.filter(v => v !== value)
+        : [...prev, value]
+    );
+  };
+
+  const handleApply = () => {
+    onApply(pendingValues);
+    setOpened(false);
+    setSearchTerm('');
+  };
+
+  const handleClear = () => {
+    setPendingValues([]);
+    onClear();
+    setOpened(false);
+    setSearchTerm('');
+  };
+
+  const handleClose = () => {
+    setOpened(false);
+    setSearchTerm('');
+    setPendingValues(selectedValues); // Reset to current selected values
+    setHighlightedIndex(0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => 
+        prev < filteredData.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => prev > 0 ? prev - 1 : 0);
+    } else if (e.key === ' ' && !e.shiftKey) {
+      e.preventDefault();
+      if (filteredData.length > 0 && highlightedIndex < filteredData.length) {
+        handleToggle(filteredData[highlightedIndex].value);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      handleApply();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleClose();
+    }
+  };
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (opened && filteredData.length > 0) {
+      const itemElement = itemRefs.current.get(highlightedIndex);
+      if (itemElement) {
+        itemElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [highlightedIndex, opened, filteredData.length]);
+
+  return (
+    <Popover
+      opened={opened}
+      onChange={setOpened}
+      position="bottom-start"
+      withArrow
+      shadow="md"
+    >
+      <Popover.Target>
+        <Button
+          variant="subtle"
+          onClick={() => setOpened(!opened)}
+          rightSection={opened ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />}
+          style={{
+            color: '#F0F2F9',
+            backgroundColor: 'transparent',
+            padding: '4px 8px',
+            fontSize: '14px',
+            fontWeight: 'normal',
+          }}
+          className="filter-text-link"
+        >
+          {label}
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown style={{ padding: 0, backgroundColor: '#E0E4EB', minWidth: 280, borderRadius: '8px', overflow: 'hidden' }}>
+        <Stack gap={0}>
+          <Box p="md" style={{ backgroundColor: '#8027F4', borderBottom: 'none' }}>
+            <TextInput
+              ref={searchInputRef}
+              placeholder={searchPlaceholder}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.currentTarget.value)}
+              onKeyDown={handleKeyDown}
+              leftSection={<IconSearch size={16} style={{ color: '#FFFFFF' }} />}
+              size="sm"
+              style={{ 
+                backgroundColor: '#8027F4',
+                border: 'none',
+              }}
+              styles={{
+                input: {
+                  backgroundColor: '#8027F4',
+                  color: '#FFFFFF',
+                  border: 'none',
+                },
+                '::placeholder': {
+                  color: '#F0F2F9',
+                }
+              }}
+            />
+          </Box>
+          <ScrollArea h={200} style={{ backgroundColor: 'white' }}>
+            <Stack gap={0} p={0}>
+              {filteredData.map((item, index) => {
+                const isSelected = pendingValues.includes(item.value);
+                const isHighlighted = index === highlightedIndex;
+                return (
+                  <Box
+                    key={item.value}
+                    data-item-index={index}
+                    ref={(el) => {
+                      if (el) {
+                        itemRefs.current.set(index, el);
+                      } else {
+                        itemRefs.current.delete(index);
+                      }
+                    }}
+                    onClick={() => {
+                      handleToggle(item.value);
+                      setHighlightedIndex(index);
+                    }}
+                    style={{
+                      padding: '12px 16px',
+                      cursor: 'pointer',
+                      backgroundColor: isHighlighted 
+                        ? 'rgba(128, 39, 244, 0.15)' 
+                        : isSelected 
+                        ? 'rgba(128, 39, 244, 0.05)' 
+                        : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      setHighlightedIndex(index);
+                      if (!isSelected && !isHighlighted) {
+                        e.currentTarget.style.backgroundColor = 'rgba(128, 39, 244, 0.02)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.backgroundColor = isHighlighted ? 'rgba(128, 39, 244, 0.15)' : 'transparent';
+                      }
+                    }}
+                  >
+                    {item.image ? (
+                      <Box
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          position: 'relative',
+                          overflow: 'hidden',
+                          border: isSelected ? 'none' : 'none',
+                        }}
+                      >
+                        <Image
+                          src={item.image}
+                          alt={item.label}
+                          width={20}
+                          height={20}
+                          style={{
+                            position: 'absolute',
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            zIndex: 0,
+                          }}
+                        />
+                        {isSelected && (
+                          <>
+                            <Box
+                              style={{
+                                position: 'absolute',
+                                width: '100%',
+                                height: '100%',
+                                backgroundColor: '#8027F4',
+                                zIndex: 1,
+                              }}
+                            />
+                            <IconCheck size={12} style={{ color: 'white', position: 'absolute', zIndex: 2 }} />
+                          </>
+                        )}
+                      </Box>
+                    ) : (
+                      <Box
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          backgroundColor: '#8027F4',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isSelected && (
+                          <IconCheck size={12} style={{ color: 'white' }} />
+                        )}
+                      </Box>
+                    )}
+                    <Text 
+                      size="sm" 
+                      style={{ 
+                        color: '#1A1B1E',
+                        flex: 1,
+                        userSelect: 'none',
+                      }}
+                    >
+                      {item.label}
+                    </Text>
+                  </Box>
+                );
+              })}
+              {filteredData.length === 0 && (
+                <Box p="md">
+                  <Text size="sm" c="dimmed" ta="center" py="md">
+                    No results found
+                  </Text>
+                </Box>
+              )}
+            </Stack>
+          </ScrollArea>
+          <Box p="md" style={{ borderTop: '1px solid rgba(0, 0, 0, 0.1)', backgroundColor: 'white' }}>
+            <Group justify="space-between" mb="sm">
+              <Text size="sm" c="dimmed">
+                Selected: {pendingValues.length}
+              </Text>
+              {pendingValues.length > 0 && (
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  onClick={handleClear}
+                  style={{ color: '#8027F4', padding: 0 }}
+                >
+                  Clear selected
+                </Button>
+              )}
+            </Group>
+            <Group justify="flex-end">
+              <Button
+                variant="subtle"
+                onClick={handleClose}
+                size="sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleApply}
+                size="sm"
+                style={{ backgroundColor: '#8027F4' }}
+              >
+                Apply
+              </Button>
+            </Group>
+          </Box>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+// FilterTag Component
+function FilterTag({
+  label,
+  value,
+  onRemove
+}: {
+  label: string;
+  value: string;
+  onRemove: () => void;
+}) {
+  return (
+    <Badge
+      variant="light"
+      leftSection={
+        <ActionIcon
+          size="xs"
+          variant="transparent"
+          onClick={onRemove}
+          style={{ color: 'inherit' }}
+        >
+          <IconX size={12} />
+        </ActionIcon>
+      }
+      style={{
+        backgroundColor: 'rgba(128, 39, 244, 0.1)',
+        color: '#8027F4',
+        paddingLeft: 4,
+      }}
+    >
+      {label}: {value}
+    </Badge>
+  );
+}
+
 // Placeholder image path for projects without screenshots
 const PLACEHOLDER_IMAGE = '/placeholder.png';
 
@@ -111,11 +478,10 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<InstanceType | 'All'>('All');
   const [selectedFeature, setSelectedFeature] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
-  const [filterKeys, setFilterKeys] = useState({ client: 0, project: 0, feature: 0 });
-  const [featuredFilter, setFeaturedFilter] = useState<'all' | 'featured'>('all');
+  const [featuredFilter, setFeaturedFilter] = useState<string[]>([]);
   const [featuredInstances, setFeaturedInstances] = useState<Set<string>>(new Set());
   const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
@@ -812,25 +1178,47 @@ export default function HomePage() {
       
       if (activeTab !== 'All' && instance.type !== activeTab) return false;
       if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
-      if (statusFilter === 'active' && instance.active === false) return false;
-      if (statusFilter === 'inactive' && instance.active !== false) return false;
+      if (statusFilter.length > 0) {
+        const statusMatch = statusFilter.some(status => {
+          if (status === 'active') return instance.active !== false;
+          if (status === 'inactive') return instance.active === false;
+          return false;
+        });
+        if (!statusMatch) return false;
+      }
       if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
       if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
-      if (featuredFilter === 'featured' && !featuredInstances.has(instance.id)) return false;
+      if (featuredFilter.length > 0) {
+        const featuredMatch = featuredFilter.some(f => {
+          if (f === 'featured') return featuredInstances.has(instance.id);
+          if (f === 'not-featured') return !featuredInstances.has(instance.id);
+          return false;
+        });
+        if (!featuredMatch) return false;
+      }
       return true;
     });
   }, [instances, activeTab, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
 
   const clientOptions = useMemo(() => {
-    const clients = Array.from(
+    const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+    const clientNames = Array.from(
       new Set(
         instances
           .map((i) => (i.client || '').trim())
           .filter((c) => c.length > 0)
       )
     ).sort((a, b) => a.localeCompare(b));
-    return clients.map((c) => ({ value: c, label: c }));
-  }, [instances]);
+    return clientNames.map((c) => {
+      const clientLogo = clients[c]?.logo;
+      const logoPath = clientLogo 
+        ? (basePath && !clientLogo.startsWith(basePath) && !clientLogo.startsWith('http') && !clientLogo.startsWith('data:') 
+            ? `${basePath}${clientLogo}` 
+            : clientLogo)
+        : undefined;
+      return { value: c, label: c, image: logoPath };
+    });
+  }, [instances, clients]);
 
   const projectOptions = useMemo(() => {
     const uniqueProjects = Array.from(
@@ -838,6 +1226,16 @@ export default function HomePage() {
     ).sort((a, b) => a.localeCompare(b));
     return uniqueProjects.map((name) => ({ value: name, label: name }));
   }, [instances]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' },
+  ], []);
+
+  const featuredOptions = useMemo(() => [
+    { value: 'featured', label: 'Yes' },
+    { value: 'not-featured', label: 'No' },
+  ], []);
 
   const allFeatures = Array.from(
     new Set(instances.flatMap((i) => i.features))
@@ -868,13 +1266,17 @@ export default function HomePage() {
     ].filter(group => group.items.length > 0);
   }, [features, instances]);
 
+  const flattenedFeatures = useMemo(() => {
+    return groupedFeatures.flatMap(group => group.items);
+  }, [groupedFeatures]);
+
   const showroomInstances = useMemo(() => instances.filter((i) => i.type === 'Virtual Showroom'), [instances]);
   const apartmentInstances = useMemo(() => instances.filter((i) => i.type === 'Apartment Chooser'), [instances]);
 
   // Grouping logic
   const getGroupKey = (instance: ExploreInstance, groupBy: 'client' | 'status' | 'feature'): string => {
     if (groupBy === 'client') {
-      return instance.client || '(No Client)';
+      return instance.client || '';
     }
     if (groupBy === 'status') {
       return instance.active === false ? 'Inactive' : 'Active';
@@ -914,6 +1316,11 @@ export default function HomePage() {
         // Status: Active first
         if (a.includes('Active') && b.includes('Inactive')) return -1;
         if (a.includes('Inactive') && b.includes('Active')) return 1;
+      }
+      if (groupBy1 === 'client') {
+        // Client: "No Client" first, then alphabetical
+        if (a === '' && b !== '') return -1;
+        if (a !== '' && b === '') return 1;
       }
       return a.localeCompare(b);
     });
@@ -1074,124 +1481,46 @@ export default function HomePage() {
         <Tabs.Panel value="All" pt="xl">
           <Stack gap="md">
             <Group gap="sm" align="flex-end" wrap="wrap">
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`client-${filterKeys.client}`}
-                  placeholder="Filter by client"
-                  data={clientOptions}
-                  value={clientFilter}
-                  onChange={(value) => setClientFilter(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 220 }}
-                  styles={filterDropdownStyles}
-                />
-                {clientFilter.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setClientFilter([]);
-                      setFilterKeys(prev => ({ ...prev, client: prev.client + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`project-${filterKeys.project}`}
-                  placeholder="Filter by project"
-                  data={projectOptions}
-                  value={projectFilter}
-                  onChange={(value) => setProjectFilter(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 220 }}
-                  styles={filterDropdownStyles}
-                />
-                {projectFilter.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setProjectFilter([]);
-                      setFilterKeys(prev => ({ ...prev, project: prev.project + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`feature-${filterKeys.feature}`}
-                  placeholder="Filter by feature"
-                  data={groupedFeatures}
-                  value={selectedFeature}
-                  onChange={(value) => setSelectedFeature(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 260 }}
-                  styles={filterDropdownStyles}
-                />
-                {selectedFeature.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setSelectedFeature([]);
-                      setFilterKeys(prev => ({ ...prev, feature: prev.feature + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Select
-                placeholder="All statuses"
-                data={[
-                  { value: 'all', label: 'Any status' },
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                ]}
-                value={statusFilter}
-                onChange={(value) =>
-                  setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
-                }
-                variant="unstyled"
-                className="filter-text-link"
-                style={{ maxWidth: 160 }}
-                styles={filterDropdownStyles}
+              <FilterDropdown
+                label="Filter by client"
+                data={clientOptions}
+                selectedValues={clientFilter}
+                onApply={setClientFilter}
+                onClear={() => setClientFilter([])}
+                searchPlaceholder="Search clients"
+              />
+              <FilterDropdown
+                label="Filter by project"
+                data={projectOptions}
+                selectedValues={projectFilter}
+                onApply={setProjectFilter}
+                onClear={() => setProjectFilter([])}
+                searchPlaceholder="Search projects"
+              />
+              <FilterDropdown
+                label="Filter by feature"
+                data={flattenedFeatures}
+                selectedValues={selectedFeature}
+                onApply={setSelectedFeature}
+                onClear={() => setSelectedFeature([])}
+                searchPlaceholder="Search features"
+              />
+              <FilterDropdown
+                label="Filter by status"
+                data={statusOptions}
+                selectedValues={statusFilter}
+                onApply={setStatusFilter}
+                onClear={() => setStatusFilter([])}
+                searchPlaceholder="Search status"
               />
               {userRole !== 'partner' && (
-                <Select
-                  placeholder="Featured or not"
-                  data={[
-                    { value: 'all', label: 'Featured or not' },
-                    { value: 'featured', label: 'Featured' },
-                  ]}
-                  value={featuredFilter}
-                  onChange={(value) => {
-                    setFeaturedFilter((value as 'all' | 'featured') || 'all');
-                  }}
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 160 }}
-                  styles={filterDropdownStyles}
+                <FilterDropdown
+                  label="Filter by featured"
+                  data={featuredOptions}
+                  selectedValues={featuredFilter}
+                  onApply={setFeaturedFilter}
+                  onClear={() => setFeaturedFilter([])}
+                  searchPlaceholder="Search"
                 />
               )}
               <Select
@@ -1232,6 +1561,57 @@ export default function HomePage() {
                 />
               )}
             </Group>
+            {/* Filter Tags Row */}
+            {(clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
+              <Group gap="xs" wrap="wrap">
+                {clientFilter.map((client) => (
+                  <FilterTag
+                    key={`client-${client}`}
+                    label="Client"
+                    value={client}
+                    onRemove={() => setClientFilter(clientFilter.filter(c => c !== client))}
+                  />
+                ))}
+                {projectFilter.map((project) => (
+                  <FilterTag
+                    key={`project-${project}`}
+                    label="Project"
+                    value={project}
+                    onRemove={() => setProjectFilter(projectFilter.filter(p => p !== project))}
+                  />
+                ))}
+                {selectedFeature.map((feature) => (
+                  <FilterTag
+                    key={`feature-${feature}`}
+                    label="Feature"
+                    value={feature}
+                    onRemove={() => setSelectedFeature(selectedFeature.filter(f => f !== feature))}
+                  />
+                ))}
+                {statusFilter.map((status) => {
+                  const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
+                  return (
+                    <FilterTag
+                      key={`status-${status}`}
+                      label="Status"
+                      value={statusLabel}
+                      onRemove={() => setStatusFilter(statusFilter.filter(s => s !== status))}
+                    />
+                  );
+                })}
+                {featuredFilter.map((featured) => {
+                  const featuredLabel = featuredOptions.find(opt => opt.value === featured)?.label || featured;
+                  return (
+                    <FilterTag
+                      key={`featured-${featured}`}
+                      label="Featured"
+                      value={featuredLabel}
+                      onRemove={() => setFeaturedFilter(featuredFilter.filter(f => f !== featured))}
+                    />
+                  );
+                })}
+              </Group>
+            )}
             {Object.keys(groupedInstances).length > 0 ? (
               <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
                 {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
@@ -1240,15 +1620,58 @@ export default function HomePage() {
                   <Accordion.Item key={accordionValue} value={accordionValue}>
                     <Accordion.Control>
                       <Group gap="sm" align="center">
-                        <Text fw={500} size="lg">
-                          {groupKey.includes(' | ') ? (
+                        {(() => {
+                          const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+                          let displayKey = groupKey;
+                          let clientName: string | null = null;
+                          
+                          if (groupKey.includes(' | ')) {
+                            const parts = groupKey.split(' | ');
+                            // Check if first part is a client
+                            if (groupBy1 === 'client' && parts[0]) {
+                              clientName = parts[0];
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            } else if (groupBy2 === 'client' && parts[1]) {
+                              clientName = parts[1];
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            } else {
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            }
+                          } else {
+                            if (groupBy1 === 'client') {
+                              clientName = groupKey || null;
+                              displayKey = groupKey || 'No Client';
+                            } else {
+                              displayKey = groupKey || 'All Projects';
+                            }
+                          }
+                          
+                          const clientLogo = clientName && clients[clientName]?.logo;
+                          const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+                          
+                          return (
                             <>
-                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                              <Text fw={500} size="lg">
+                                {groupKey.includes(' | ') ? (
+                                  <>
+                                    {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                                  </>
+                                ) : (
+                                  displayKey
+                                )}
+                              </Text>
+                              {logoPath && (
+                                <Image
+                                  src={logoPath}
+                                  alt={clientName || ''}
+                                  width={24}
+                                  height={24}
+                                  style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
+                                />
+                              )}
                             </>
-                          ) : (
-                            groupKey || 'All Projects'
-                          )}
-                        </Text>
+                          );
+                        })()}
                         <Badge size="sm" variant="light">{groupInstances.length}</Badge>
                       </Group>
                     </Accordion.Control>
@@ -1497,124 +1920,46 @@ export default function HomePage() {
         <Tabs.Panel value="Apartment Chooser" pt="xl">
           <Stack gap="md">
             <Group gap="sm" align="flex-end" wrap="wrap">
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`client-${filterKeys.client}`}
-                  placeholder="Filter by client"
-                  data={clientOptions}
-                  value={clientFilter}
-                  onChange={(value) => setClientFilter(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 220 }}
-                  styles={filterDropdownStyles}
-                />
-                {clientFilter.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setClientFilter([]);
-                      setFilterKeys(prev => ({ ...prev, client: prev.client + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`project-${filterKeys.project}`}
-                  placeholder="Filter by project"
-                  data={projectOptions}
-                  value={projectFilter}
-                  onChange={(value) => setProjectFilter(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 220 }}
-                  styles={filterDropdownStyles}
-                />
-                {projectFilter.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setProjectFilter([]);
-                      setFilterKeys(prev => ({ ...prev, project: prev.project + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`feature-${filterKeys.feature}`}
-                  placeholder="Filter by feature"
-                  data={groupedFeatures}
-                  value={selectedFeature}
-                  onChange={(value) => setSelectedFeature(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 260 }}
-                  styles={filterDropdownStyles}
-                />
-                {selectedFeature.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setSelectedFeature([]);
-                      setFilterKeys(prev => ({ ...prev, feature: prev.feature + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Select
-                placeholder="All statuses"
-                data={[
-                  { value: 'all', label: 'Any status' },
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                ]}
-                value={statusFilter}
-                onChange={(value) =>
-                  setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
-                }
-                variant="unstyled"
-                className="filter-text-link"
-                style={{ maxWidth: 160 }}
-                styles={filterDropdownStyles}
+              <FilterDropdown
+                label="Filter by client"
+                data={clientOptions}
+                selectedValues={clientFilter}
+                onApply={setClientFilter}
+                onClear={() => setClientFilter([])}
+                searchPlaceholder="Search clients"
+              />
+              <FilterDropdown
+                label="Filter by project"
+                data={projectOptions}
+                selectedValues={projectFilter}
+                onApply={setProjectFilter}
+                onClear={() => setProjectFilter([])}
+                searchPlaceholder="Search projects"
+              />
+              <FilterDropdown
+                label="Filter by feature"
+                data={flattenedFeatures}
+                selectedValues={selectedFeature}
+                onApply={setSelectedFeature}
+                onClear={() => setSelectedFeature([])}
+                searchPlaceholder="Search features"
+              />
+              <FilterDropdown
+                label="Filter by status"
+                data={statusOptions}
+                selectedValues={statusFilter}
+                onApply={setStatusFilter}
+                onClear={() => setStatusFilter([])}
+                searchPlaceholder="Search status"
               />
               {userRole !== 'partner' && (
-                <Select
-                  placeholder="Featured or not"
-                  data={[
-                    { value: 'all', label: 'Featured or not' },
-                    { value: 'featured', label: 'Featured' },
-                  ]}
-                  value={featuredFilter}
-                  onChange={(value) => {
-                    setFeaturedFilter((value as 'all' | 'featured') || 'all');
-                  }}
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 160 }}
-                  styles={filterDropdownStyles}
+                <FilterDropdown
+                  label="Filter by featured"
+                  data={featuredOptions}
+                  selectedValues={featuredFilter}
+                  onApply={setFeaturedFilter}
+                  onClear={() => setFeaturedFilter([])}
+                  searchPlaceholder="Search"
                 />
               )}
               <Select
@@ -1655,6 +2000,57 @@ export default function HomePage() {
                 />
               )}
             </Group>
+            {/* Filter Tags Row */}
+            {(clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
+              <Group gap="xs" wrap="wrap">
+                {clientFilter.map((client) => (
+                  <FilterTag
+                    key={`client-${client}`}
+                    label="Client"
+                    value={client}
+                    onRemove={() => setClientFilter(clientFilter.filter(c => c !== client))}
+                  />
+                ))}
+                {projectFilter.map((project) => (
+                  <FilterTag
+                    key={`project-${project}`}
+                    label="Project"
+                    value={project}
+                    onRemove={() => setProjectFilter(projectFilter.filter(p => p !== project))}
+                  />
+                ))}
+                {selectedFeature.map((feature) => (
+                  <FilterTag
+                    key={`feature-${feature}`}
+                    label="Feature"
+                    value={feature}
+                    onRemove={() => setSelectedFeature(selectedFeature.filter(f => f !== feature))}
+                  />
+                ))}
+                {statusFilter.map((status) => {
+                  const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
+                  return (
+                    <FilterTag
+                      key={`status-${status}`}
+                      label="Status"
+                      value={statusLabel}
+                      onRemove={() => setStatusFilter(statusFilter.filter(s => s !== status))}
+                    />
+                  );
+                })}
+                {featuredFilter.map((featured) => {
+                  const featuredLabel = featuredOptions.find(opt => opt.value === featured)?.label || featured;
+                  return (
+                    <FilterTag
+                      key={`featured-${featured}`}
+                      label="Featured"
+                      value={featuredLabel}
+                      onRemove={() => setFeaturedFilter(featuredFilter.filter(f => f !== featured))}
+                    />
+                  );
+                })}
+              </Group>
+            )}
             {Object.keys(groupedInstances).length > 0 ? (
               <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
                 {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
@@ -1663,15 +2059,58 @@ export default function HomePage() {
                   <Accordion.Item key={accordionValue} value={accordionValue}>
                     <Accordion.Control>
                       <Group gap="sm" align="center">
-                        <Text fw={500} size="lg">
-                          {groupKey.includes(' | ') ? (
+                        {(() => {
+                          const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+                          let displayKey = groupKey;
+                          let clientName: string | null = null;
+                          
+                          if (groupKey.includes(' | ')) {
+                            const parts = groupKey.split(' | ');
+                            // Check if first part is a client
+                            if (groupBy1 === 'client' && parts[0]) {
+                              clientName = parts[0];
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            } else if (groupBy2 === 'client' && parts[1]) {
+                              clientName = parts[1];
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            } else {
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            }
+                          } else {
+                            if (groupBy1 === 'client') {
+                              clientName = groupKey || null;
+                              displayKey = groupKey || 'No Client';
+                            } else {
+                              displayKey = groupKey || 'All Projects';
+                            }
+                          }
+                          
+                          const clientLogo = clientName && clients[clientName]?.logo;
+                          const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+                          
+                          return (
                             <>
-                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                              <Text fw={500} size="lg">
+                                {groupKey.includes(' | ') ? (
+                                  <>
+                                    {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                                  </>
+                                ) : (
+                                  displayKey
+                                )}
+                              </Text>
+                              {logoPath && (
+                                <Image
+                                  src={logoPath}
+                                  alt={clientName || ''}
+                                  width={24}
+                                  height={24}
+                                  style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
+                                />
+                              )}
                             </>
-                          ) : (
-                            groupKey || 'All Projects'
-                          )}
-                        </Text>
+                          );
+                        })()}
                         <Badge size="sm" variant="light">{groupInstances.length}</Badge>
                       </Group>
                     </Accordion.Control>
@@ -1920,124 +2359,46 @@ export default function HomePage() {
         <Tabs.Panel value="Virtual Showroom" pt="xl">
           <Stack gap="md">
             <Group gap="sm" align="flex-end" wrap="wrap">
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`client-${filterKeys.client}`}
-                  placeholder="Filter by client"
-                  data={clientOptions}
-                  value={clientFilter}
-                  onChange={(value) => setClientFilter(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 220 }}
-                  styles={filterDropdownStyles}
-                />
-                {clientFilter.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setClientFilter([]);
-                      setFilterKeys(prev => ({ ...prev, client: prev.client + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`project-${filterKeys.project}`}
-                  placeholder="Filter by project"
-                  data={projectOptions}
-                  value={projectFilter}
-                  onChange={(value) => setProjectFilter(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 220 }}
-                  styles={filterDropdownStyles}
-                />
-                {projectFilter.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setProjectFilter([]);
-                      setFilterKeys(prev => ({ ...prev, project: prev.project + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Group gap={4} align="flex-end">
-                <Select
-                  key={`feature-${filterKeys.feature}`}
-                  placeholder="Filter by feature"
-                  data={groupedFeatures}
-                  value={selectedFeature}
-                  onChange={(value) => setSelectedFeature(value as string[])}
-                  clearable
-                  searchable
-                  multiple
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 260 }}
-                  styles={filterDropdownStyles}
-                />
-                {selectedFeature.length > 0 && (
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setSelectedFeature([]);
-                      setFilterKeys(prev => ({ ...prev, feature: prev.feature + 1 }));
-                    }}
-                    style={{ color: '#F0F2F9' }}
-                  >
-                    <IconX size={14} />
-                  </ActionIcon>
-                )}
-              </Group>
-              <Select
-                placeholder="All statuses"
-                data={[
-                  { value: 'all', label: 'Any status' },
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                ]}
-                value={statusFilter}
-                onChange={(value) =>
-                  setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
-                }
-                variant="unstyled"
-                className="filter-text-link"
-                style={{ maxWidth: 160 }}
-                styles={filterDropdownStyles}
+              <FilterDropdown
+                label="Filter by client"
+                data={clientOptions}
+                selectedValues={clientFilter}
+                onApply={setClientFilter}
+                onClear={() => setClientFilter([])}
+                searchPlaceholder="Search clients"
+              />
+              <FilterDropdown
+                label="Filter by project"
+                data={projectOptions}
+                selectedValues={projectFilter}
+                onApply={setProjectFilter}
+                onClear={() => setProjectFilter([])}
+                searchPlaceholder="Search projects"
+              />
+              <FilterDropdown
+                label="Filter by feature"
+                data={flattenedFeatures}
+                selectedValues={selectedFeature}
+                onApply={setSelectedFeature}
+                onClear={() => setSelectedFeature([])}
+                searchPlaceholder="Search features"
+              />
+              <FilterDropdown
+                label="Filter by status"
+                data={statusOptions}
+                selectedValues={statusFilter}
+                onApply={setStatusFilter}
+                onClear={() => setStatusFilter([])}
+                searchPlaceholder="Search status"
               />
               {userRole !== 'partner' && (
-                <Select
-                  placeholder="Featured or not"
-                  data={[
-                    { value: 'all', label: 'Featured or not' },
-                    { value: 'featured', label: 'Featured' },
-                  ]}
-                  value={featuredFilter}
-                  onChange={(value) => {
-                    setFeaturedFilter((value as 'all' | 'featured') || 'all');
-                  }}
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 160 }}
-                  styles={filterDropdownStyles}
+                <FilterDropdown
+                  label="Filter by featured"
+                  data={featuredOptions}
+                  selectedValues={featuredFilter}
+                  onApply={setFeaturedFilter}
+                  onClear={() => setFeaturedFilter([])}
+                  searchPlaceholder="Search"
                 />
               )}
               <Select
@@ -2078,6 +2439,57 @@ export default function HomePage() {
                 />
               )}
             </Group>
+            {/* Filter Tags Row */}
+            {(clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
+              <Group gap="xs" wrap="wrap">
+                {clientFilter.map((client) => (
+                  <FilterTag
+                    key={`client-${client}`}
+                    label="Client"
+                    value={client}
+                    onRemove={() => setClientFilter(clientFilter.filter(c => c !== client))}
+                  />
+                ))}
+                {projectFilter.map((project) => (
+                  <FilterTag
+                    key={`project-${project}`}
+                    label="Project"
+                    value={project}
+                    onRemove={() => setProjectFilter(projectFilter.filter(p => p !== project))}
+                  />
+                ))}
+                {selectedFeature.map((feature) => (
+                  <FilterTag
+                    key={`feature-${feature}`}
+                    label="Feature"
+                    value={feature}
+                    onRemove={() => setSelectedFeature(selectedFeature.filter(f => f !== feature))}
+                  />
+                ))}
+                {statusFilter.map((status) => {
+                  const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
+                  return (
+                    <FilterTag
+                      key={`status-${status}`}
+                      label="Status"
+                      value={statusLabel}
+                      onRemove={() => setStatusFilter(statusFilter.filter(s => s !== status))}
+                    />
+                  );
+                })}
+                {featuredFilter.map((featured) => {
+                  const featuredLabel = featuredOptions.find(opt => opt.value === featured)?.label || featured;
+                  return (
+                    <FilterTag
+                      key={`featured-${featured}`}
+                      label="Featured"
+                      value={featuredLabel}
+                      onRemove={() => setFeaturedFilter(featuredFilter.filter(f => f !== featured))}
+                    />
+                  );
+                })}
+              </Group>
+            )}
             {Object.keys(groupedInstances).length > 0 ? (
               <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
                 {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
@@ -2086,15 +2498,58 @@ export default function HomePage() {
                   <Accordion.Item key={accordionValue} value={accordionValue}>
                     <Accordion.Control>
                       <Group gap="sm" align="center">
-                        <Text fw={500} size="lg">
-                          {groupKey.includes(' | ') ? (
+                        {(() => {
+                          const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+                          let displayKey = groupKey;
+                          let clientName: string | null = null;
+                          
+                          if (groupKey.includes(' | ')) {
+                            const parts = groupKey.split(' | ');
+                            // Check if first part is a client
+                            if (groupBy1 === 'client' && parts[0]) {
+                              clientName = parts[0];
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            } else if (groupBy2 === 'client' && parts[1]) {
+                              clientName = parts[1];
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            } else {
+                              displayKey = `${parts[0]} → ${parts[1]}`;
+                            }
+                          } else {
+                            if (groupBy1 === 'client') {
+                              clientName = groupKey || null;
+                              displayKey = groupKey || 'No Client';
+                            } else {
+                              displayKey = groupKey || 'All Projects';
+                            }
+                          }
+                          
+                          const clientLogo = clientName && clients[clientName]?.logo;
+                          const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+                          
+                          return (
                             <>
-                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                              <Text fw={500} size="lg">
+                                {groupKey.includes(' | ') ? (
+                                  <>
+                                    {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                                  </>
+                                ) : (
+                                  displayKey
+                                )}
+                              </Text>
+                              {logoPath && (
+                                <Image
+                                  src={logoPath}
+                                  alt={clientName || ''}
+                                  width={24}
+                                  height={24}
+                                  style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
+                                />
+                              )}
                             </>
-                          ) : (
-                            groupKey || 'All Projects'
-                          )}
-                        </Text>
+                          );
+                        })()}
                         <Badge size="sm" variant="light">{groupInstances.length}</Badge>
                       </Group>
                     </Accordion.Control>
@@ -2358,11 +2813,52 @@ export default function HomePage() {
             onChange={(e) => setFormName(e.currentTarget.value)}
             required
           />
-          <TextInput
+          <Select
             label="Client"
-            placeholder="Client / owner (optional)"
-            value={formClient}
-            onChange={(e) => setFormClient(e.currentTarget.value)}
+            placeholder="Select client (optional)"
+            data={clientOptions.map(client => ({
+              value: client.value,
+              label: client.label,
+              logo: client.image,
+            }))}
+            value={formClient || null}
+            onChange={(value) => setFormClient(value || '')}
+            clearable
+            searchable
+            itemComponent={({ label, value, ...others }: any) => {
+              const clientLogo = others.logo;
+              const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+              const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+              
+              return (
+                <Group gap="sm" align="center" {...others}>
+                  {logoPath && (
+                    <Image
+                      src={logoPath}
+                      alt={value}
+                      width={20}
+                      height={20}
+                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                    />
+                  )}
+                  <Text>{label}</Text>
+                </Group>
+              );
+            }}
+            leftSection={formClient && clients[formClient]?.logo ? (() => {
+              const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+              const logoPath = clients[formClient]!.logo!;
+              const fullLogoPath = basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath;
+              return (
+                <Image
+                  src={fullLogoPath}
+                  alt={formClient}
+                  width={20}
+                  height={20}
+                  style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                />
+              );
+            })() : undefined}
           />
           <TextInput
             label="Link"

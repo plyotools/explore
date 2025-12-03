@@ -253,19 +253,6 @@
     "screenshot": "./projects/madlalia/screenshot.jpg"
   },
   {
-    "name": "Mariakvartalet",
-    "link": "https://mariakvartalet.plyo.cloud/new-homes-single-project/boligvelger",
-    "type": "Apartment Chooser",
-    "features": [
-      "Sun Path"
-    ],
-    "screenshot": "./projects/mariakvartalet/screenshot.png",
-    "id": "mariakvartalet",
-    "createdAt": "2025-11-27T18:45:20.295Z",
-    "description": "",
-    "active": false
-  },
-  {
     "id": "mariakvartalet-1",
     "name": "Maria",
     "link": "https://mariakvartalet.plyo.cloud/?y=330&p=19",

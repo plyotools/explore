@@ -14,7 +14,8 @@
   "Apartment Chooser": [
     {
       "name": "Hotspots",
-      "color": "#C18CFF"
+      "color": "#C18CFF",
+      "icon": "IconLabelFilled"
     },
     {
       "name": "Sun Path",
