@@ -1,0 +1,11 @@
+{
+  "id": "kanalparkenbolig",
+  "name": "Kanalparken",
+  "link": "https://kanalparkenbolig.no/",
+  "type": "Apartment Chooser",
+  "features": [],
+  "description": "",
+  "createdAt": "2025-12-03T10:13:16.957Z",
+  "active": true,
+  "client": "Barlindhaug Eiendom"
+}

@@ -1,12 +1,25 @@
 {
   "Virtual Showroom": [
-    "Floor plan",
-    "Styles",
-    "Hotspots"
+    {
+      "name": "Floor Plan",
+      "color": "#00628C",
+      "icon": "Icon24Hours"
+    },
+    {
+      "name": "Styles",
+      "color": "#5BBBDD",
+      "icon": "IconActivityHeartbeat"
+    }
   ],
   "Apartment Chooser": [
-    "Sun path",
-    "Sun slider",
-    "Street view"
+    {
+      "name": "Hotspots",
+      "color": "#C18CFF"
+    },
+    {
+      "name": "Sun Path",
+      "color": "#FFCC7F",
+      "icon": "IconSun"
+    }
   ]
 }

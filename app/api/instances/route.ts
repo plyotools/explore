@@ -20,13 +20,13 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { name, link, type, features, screenshot } = body;
+    const { name, link, type, features, screenshot, client, active } = body;
     
     if (!name || !link || !type || !Array.isArray(features)) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
     
-    const instance = await addInstance({ name, link, type, features, screenshot });
+    const instance = await addInstance({ name, link, type, features, screenshot, client, active });
     return NextResponse.json(instance, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create instance' }, { status: 500 });

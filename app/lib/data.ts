@@ -1,4 +1,4 @@
-import { ExploreInstance, FeatureConfig } from './types';
+import { ExploreInstance, FeatureConfig, FeatureWithColor } from './types';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -6,6 +6,46 @@ const PROJECTS_DIR = path.join(process.cwd(), 'public', 'projects');
 const FEATURES_FILE = path.join(process.cwd(), 'data', 'features.json');
 const FEATURES_PUBLIC_FILE = path.join(process.cwd(), 'public', 'data', 'features.json');
 const INDEX_FILE = path.join(process.cwd(), 'public', 'instances.json');
+
+// Calculate color lightness (0-1, where 0 is black and 1 is white)
+function getColorLightness(color: string): number {
+  // Remove # if present
+  const hex = color.replace('#', '');
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  // Calculate relative luminance (perceived brightness)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance;
+}
+
+// Default color palette sorted by lightness (darkest to lightest)
+const DEFAULT_COLOR_PALETTE = [
+  '#0A082D', // Very dark navy
+  '#00628C', // Dark teal
+  '#15AABF', // Dark teal
+  '#5E19B8', // Darker purple
+  '#8027F4', // Purple Rain
+  '#845EF7', // Dark purple
+  '#4C6EF5', // Bright blue
+  '#5C7CFA', // Medium blue
+  '#BE4BDB', // Bright magenta
+  '#A355FF', // Medium purple
+  '#F76707', // Dark orange
+  '#FF6B6B', // Bright red
+  '#FAB005', // Dark yellow/orange
+  '#5BBBDD', // Medium sky blue
+  '#69DB7C', // Bright green
+  '#C18CFF', // Light purple
+  '#FFCC7F', // Warm yellow/gold
+  '#FFD93E', // Bright yellow
+  '#B2BAD3', // Light gray
+  '#B5F2FF', // Very light sky blue
+  '#E0BFFF', // Very light purple
+  '#F0DFFF', // Almost white purple
+  '#F0F2F9', // Off-white
+  '#FFF5D9', // Very light cream
+].sort((a, b) => getColorLightness(a) - getColorLightness(b));
 
 // Ensure directories exist
 async function ensureDirectories() {
@@ -111,6 +151,8 @@ export async function addInstance(instance: Omit<ExploreInstance, 'id' | 'create
   
   const newInstance: ExploreInstance = {
     ...instance,
+    // Default to active=true if not explicitly provided
+    active: instance.active ?? true,
     id: finalProjectId,
     createdAt: new Date().toISOString(),
   };
@@ -198,13 +240,49 @@ export async function getFeatures(): Promise<FeatureConfig> {
   try {
     await ensureDirectories();
     const content = await fs.readFile(FEATURES_FILE, 'utf-8');
-    return JSON.parse(content);
+    const data = JSON.parse(content);
+    
+    // Migrate old format (string[]) to new format (FeatureWithColor[])
+    const migrated: FeatureConfig = {
+      "Virtual Showroom": Array.isArray(data["Virtual Showroom"]) 
+        ? data["Virtual Showroom"].map((f: string | FeatureWithColor, index: number) => {
+            if (typeof f === 'string') {
+              return { name: f, color: DEFAULT_COLOR_PALETTE[index % DEFAULT_COLOR_PALETTE.length] };
+            }
+            return f;
+          })
+        : [],
+      "Apartment Chooser": Array.isArray(data["Apartment Chooser"])
+        ? data["Apartment Chooser"].map((f: string | FeatureWithColor, index: number) => {
+            if (typeof f === 'string') {
+              return { name: f, color: DEFAULT_COLOR_PALETTE[index % DEFAULT_COLOR_PALETTE.length] };
+            }
+            return f;
+          })
+        : [],
+    };
+    
+    // If migration happened, save the migrated format
+    if (data["Virtual Showroom"]?.some((f: any) => typeof f === 'string') || 
+        data["Apartment Chooser"]?.some((f: any) => typeof f === 'string')) {
+      await updateFeatures(migrated);
+    }
+    
+    return migrated;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       // File doesn't exist, create default
       const defaultFeatures: FeatureConfig = {
-        "Virtual Showroom": ["Floor plan", "Styles", "Hotspots"],
-        "Apartment Chooser": ["Sun path", "Sun slider", "Street view"]
+        "Virtual Showroom": [
+          { name: "Floor plan", color: DEFAULT_COLOR_PALETTE[0] },
+          { name: "Styles", color: DEFAULT_COLOR_PALETTE[1] },
+          { name: "Hotspots", color: DEFAULT_COLOR_PALETTE[2] }
+        ],
+        "Apartment Chooser": [
+          { name: "Sun path", color: DEFAULT_COLOR_PALETTE[3] },
+          { name: "Sun slider", color: DEFAULT_COLOR_PALETTE[4] },
+          { name: "Street view", color: DEFAULT_COLOR_PALETTE[5] }
+        ]
       };
       // Ensure public/data directory exists
       await fs.mkdir(path.dirname(FEATURES_PUBLIC_FILE), { recursive: true });
@@ -218,8 +296,16 @@ export async function getFeatures(): Promise<FeatureConfig> {
     console.error('Error fetching features:', error);
     // Return default on error
     return {
-      "Virtual Showroom": ["Floor plan", "Styles", "Hotspots"],
-      "Apartment Chooser": ["Sun path", "Sun slider", "Street view"]
+      "Virtual Showroom": [
+        { name: "Floor plan", color: DEFAULT_COLOR_PALETTE[0] },
+        { name: "Styles", color: DEFAULT_COLOR_PALETTE[1] },
+        { name: "Hotspots", color: DEFAULT_COLOR_PALETTE[2] }
+      ],
+      "Apartment Chooser": [
+        { name: "Sun path", color: DEFAULT_COLOR_PALETTE[3] },
+        { name: "Sun slider", color: DEFAULT_COLOR_PALETTE[4] },
+        { name: "Street view", color: DEFAULT_COLOR_PALETTE[5] }
+      ]
     };
   }
 }
@@ -234,6 +320,45 @@ export async function updateFeatures(features: FeatureConfig): Promise<void> {
     fs.writeFile(FEATURES_FILE, JSON.stringify(features, null, 2), 'utf-8'),
     fs.writeFile(FEATURES_PUBLIC_FILE, JSON.stringify(features, null, 2), 'utf-8'),
   ]);
+}
+
+// Clean up invalid features from all instances
+export async function cleanupInvalidFeatures(): Promise<{ cleaned: number; removed: number }> {
+  await ensureDirectories();
+  
+  // Get all valid feature names from features config
+  const featuresConfig = await getFeatures();
+  const validFeatures = new Set<string>();
+  Object.values(featuresConfig).forEach(typeFeatures => {
+    typeFeatures.forEach((feature: string | FeatureWithColor) => {
+      const featureName = typeof feature === 'string' ? feature : feature.name;
+      validFeatures.add(featureName);
+    });
+  });
+  
+  // Get all instances
+  const instances = await getInstances();
+  let cleaned = 0;
+  let totalRemoved = 0;
+  
+  // Clean up each instance
+  for (const instance of instances) {
+    const originalFeatures = instance.features;
+    const validInstanceFeatures = instance.features.filter(feature => validFeatures.has(feature));
+    
+    // Only update if there were invalid features
+    if (validInstanceFeatures.length !== originalFeatures.length) {
+      const removedCount = originalFeatures.length - validInstanceFeatures.length;
+      await updateInstance(instance.id, {
+        features: validInstanceFeatures,
+      });
+      cleaned++;
+      totalRemoved += removedCount;
+      console.log(`Cleaned instance "${instance.name}": removed ${removedCount} invalid feature(s)`);
+    }
+  }
+  
+  return { cleaned, removed: totalRemoved };
 }
 
 // Regenerate instances.json index file
