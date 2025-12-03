@@ -111,37 +111,46 @@ export default function LoginPage() {
   };
 
   return (
-    <Container size={420} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
-      <Paper withBorder shadow="md" p={30} radius="md" style={{ width: '100%' }}>
-        <Title order={2} ta="center" mb="md">
-          Login
-        </Title>
-        <Text size="sm" c="dimmed" ta="center" mb="lg">
-          Enter password to access the showcase
-        </Text>
-
-        {error && (
-          <Alert icon={<IconAlertCircle size={16} />} color="red" mb="md">
-            {error}
-          </Alert>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <PasswordInput
-            label="Password"
-            placeholder="Enter password"
-            value={password}
-            onChange={(e) => setPassword(e.currentTarget.value)}
-            required
-            mb="md"
-            autoFocus
-          />
-          <Button type="submit" fullWidth loading={loading}>
+    <div style={{ 
+      minHeight: '100vh', 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      padding: '20px',
+      backgroundColor: '#0A082D'
+    }}>
+      <Container size={420} style={{ width: '100%', maxWidth: '420px' }}>
+        <Paper withBorder shadow="md" p={30} radius="md" style={{ width: '100%' }}>
+          <Title order={2} ta="center" mb="md" style={{ color: '#F0F2F9' }}>
             Login
-          </Button>
-        </form>
-      </Paper>
-    </Container>
+          </Title>
+          <Text size="sm" c="dimmed" ta="center" mb="lg" style={{ color: '#B2BAD3' }}>
+            Enter password to access the showcase
+          </Text>
+
+          {error && (
+            <Alert icon={<IconAlertCircle size={16} />} color="red" mb="md">
+              {error}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <PasswordInput
+              label="Password"
+              placeholder="Enter password"
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+              required
+              mb="md"
+              autoFocus
+            />
+            <Button type="submit" fullWidth loading={loading}>
+              Login
+            </Button>
+          </form>
+        </Paper>
+      </Container>
+    </div>
   );
 }
 
