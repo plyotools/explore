@@ -2,6 +2,12 @@
 
 A Next.js application for managing and displaying Explore instances (Virtual Showrooms and Apartment Choosers).
 
+## 🚀 Live Demo
+
+**👉 [View the live application](https://plyotools.github.io/explore/)**
+
+The app is deployed to GitHub Pages and automatically updates on every push to the `main` branch.
+
 ## Project Structure
 
 The application uses a file-based storage system. Each project is stored in its own folder under `public/projects/`:
