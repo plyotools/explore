@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useRouter } from 'next/navigation';
 import * as TablerIcons from '@tabler/icons-react';
 import {
@@ -110,15 +110,11 @@ function IconPickerContent({
 }
 
 // FilterDropdown Component
-function FilterDropdown({
-  label,
-  data,
-  selectedValues,
-  onApply,
-  onClear,
-  placeholder = "Search values",
-  searchPlaceholder = "Search values"
-}: {
+interface FilterDropdownRef {
+  open: () => void;
+}
+
+const FilterDropdown = forwardRef<FilterDropdownRef, {
   label: string;
   data: Array<{ value: string; label: string; image?: string }>;
   selectedValues: string[];
@@ -126,7 +122,23 @@ function FilterDropdown({
   onClear: () => void;
   placeholder?: string;
   searchPlaceholder?: string;
-}) {
+  onNavigateLeft?: () => void;
+  onNavigateRight?: () => void;
+  isLeftmost?: boolean;
+  isRightmost?: boolean;
+}>(function FilterDropdown({
+  label,
+  data,
+  selectedValues,
+  onApply,
+  onClear,
+  placeholder = "Search values",
+  searchPlaceholder = "Search values",
+  onNavigateLeft,
+  onNavigateRight,
+  isLeftmost = false,
+  isRightmost = false
+}, ref) {
   const [opened, setOpened] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingValues, setPendingValues] = useState<string[]>(selectedValues);
@@ -134,6 +146,13 @@ function FilterDropdown({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // Expose open method via ref
+  useImperativeHandle(ref, () => ({
+    open: () => {
+      setOpened(true);
+    }
+  }));
 
   // Update pending values when selectedValues change externally
   useEffect(() => {
@@ -151,11 +170,11 @@ function FilterDropdown({
     }
   }, [opened]);
 
-  // Reset highlighted index when search term or filtered data changes
+  // Reset highlighted index when search term changes, but keep it within bounds
   useEffect(() => {
     setHighlightedIndex(0);
-  }, [searchTerm, data]);
-
+  }, [searchTerm]);
+  
   const filteredData = useMemo(() => {
     if (!searchTerm) return data;
     const searchLower = searchTerm.toLowerCase();
@@ -164,6 +183,15 @@ function FilterDropdown({
       item.value.toLowerCase().includes(searchLower)
     );
   }, [data, searchTerm]);
+
+  // Clamp highlighted index when filtered data changes (but don't reset if user is navigating)
+  useEffect(() => {
+    if (filteredData.length === 0) {
+      setHighlightedIndex(0);
+    } else if (highlightedIndex >= filteredData.length) {
+      setHighlightedIndex(filteredData.length - 1);
+    }
+  }, [filteredData.length, highlightedIndex]);
 
   const handleToggle = (value: string) => {
     const newValues = pendingValues.includes(value) 
@@ -189,14 +217,53 @@ function FilterDropdown({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Check if it's a printable character (letter, number, etc.) but not space
+    const isPrintableChar = e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey;
+    
+    if (isPrintableChar) {
+      // Focus search input and let the character be typed
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+        // Don't prevent default - let the input handle it
+      }
+      return;
+    }
+    
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex(prev => 
-        prev < filteredData.length - 1 ? prev + 1 : prev
-      );
+      setHighlightedIndex(prev => {
+        const maxIndex = filteredData.length > 0 ? filteredData.length - 1 : 0;
+        return prev < maxIndex ? prev + 1 : prev;
+      });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex(prev => prev > 0 ? prev - 1 : 0);
+      if (highlightedIndex === 0) {
+        // At top, close menu
+        handleClose();
+      } else {
+        setHighlightedIndex(prev => {
+          // Simply decrement, ensuring we don't go below 0
+          const newIndex = Math.max(0, prev - 1);
+          // Ensure we don't exceed filtered data length
+          return Math.min(newIndex, filteredData.length > 0 ? filteredData.length - 1 : 0);
+        });
+      }
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (!isLeftmost && onNavigateLeft) {
+        handleClose();
+        // Small delay to ensure current menu closes first
+        setTimeout(() => onNavigateLeft(), 50);
+      }
+      // If leftmost, do nothing (don't close menu)
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (!isRightmost && onNavigateRight) {
+        handleClose();
+        // Small delay to ensure current menu closes first
+        setTimeout(() => onNavigateRight(), 50);
+      }
+      // If rightmost, do nothing (don't close menu)
     } else if (e.key === ' ' && !e.shiftKey) {
       e.preventDefault();
       if (filteredData.length > 0 && highlightedIndex < filteredData.length) {
@@ -256,7 +323,7 @@ function FilterDropdown({
           style={{ outline: 'none' }}
         >
         <Stack gap={0}>
-          <Box p="md" style={{ backgroundColor: '#8027F4', borderBottom: 'none' }}>
+          <Box p="md" style={{ backgroundColor: 'white', borderBottom: 'none' }}>
             <TextInput
               ref={searchInputRef}
               placeholder={searchPlaceholder}
@@ -268,20 +335,11 @@ function FilterDropdown({
                   handleKeyDown(e);
                 }
               }}
-              leftSection={<IconSearch size={16} style={{ color: '#FFFFFF' }} />}
+              leftSection={<IconSearch size={16} />}
               size="sm"
-              style={{ 
-                backgroundColor: '#8027F4',
-                border: 'none',
-              }}
               styles={{
                 input: {
-                  backgroundColor: '#8027F4',
-                  color: '#FFFFFF',
                   border: 'none',
-                },
-                '::placeholder': {
-                  color: '#F0F2F9',
                 }
               }}
             />
@@ -445,7 +503,7 @@ function FilterDropdown({
       </Popover.Dropdown>
     </Popover>
   );
-}
+});
 
 // FilterTag Component
 function FilterTag({
@@ -494,6 +552,14 @@ export default function HomePage() {
   const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [featuredFilter, setFeaturedFilter] = useState<string[]>([]);
+  
+  // Refs for filter navigation
+  const typeFilterRef = useRef<FilterDropdownRef>(null);
+  const clientFilterRef = useRef<FilterDropdownRef>(null);
+  const projectFilterRef = useRef<FilterDropdownRef>(null);
+  const featureFilterRef = useRef<FilterDropdownRef>(null);
+  const statusFilterRef = useRef<FilterDropdownRef>(null);
+  const starredFilterRef = useRef<FilterDropdownRef>(null);
   const [featuredInstances, setFeaturedInstances] = useState<Set<string>>(new Set());
   const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
@@ -715,7 +781,6 @@ export default function HomePage() {
       loadClients(),
     ]).catch(console.error);
     loadFeaturedInstances();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadColorPalette = async () => {
@@ -991,7 +1056,18 @@ export default function HomePage() {
     setAuthenticated(false);
     setIsAdmin(false);
     if (typeof window !== 'undefined') {
-      const basePath = window.location.pathname.startsWith('/explore') ? '/explore' : '';
+      // Determine basePath - check if we're on GitHub Pages
+      const hostname = window.location.hostname;
+      const pathname = window.location.pathname;
+      let basePath = '';
+      
+      // If on GitHub Pages (plyotools.github.io), always use /explore
+      if (hostname === 'plyotools.github.io') {
+        basePath = '/explore';
+      } else if (pathname.startsWith('/explore')) {
+        basePath = '/explore';
+      }
+      
       window.location.replace(`${basePath}/login`);
     }
   };
@@ -1350,6 +1426,85 @@ export default function HomePage() {
     return result;
   }, [filteredInstances, groupBy1, groupBy2]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Only trigger if not typing in an input, textarea, or contenteditable element
+      const target = e.target as HTMLElement;
+      const isInputElement = target.tagName === 'INPUT' || 
+                             target.tagName === 'TEXTAREA' || 
+                             target.isContentEditable ||
+                             target.closest('input') ||
+                             target.closest('textarea');
+      
+      if (isInputElement || e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+      
+      // 'f' key opens first filter
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        typeFilterRef.current?.open();
+      }
+      
+      // 'c' key clears all filters
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        setTypeFilter([]);
+        setClientFilter([]);
+        setProjectFilter([]);
+        setSelectedFeature([]);
+        setStatusFilter([]);
+        setFeaturedFilter([]);
+      }
+      
+      // 'o' key opens all visible projects in new tabs
+      if (e.key === 'o' || e.key === 'O') {
+        e.preventDefault();
+        // Get all instances in display order (from groupedInstances)
+        const instancesInOrder: ExploreInstance[] = [];
+        const sortedGroupKeys = Object.keys(groupedInstances).sort((a, b) => {
+          if (groupBy1 === 'status') {
+            if (a.includes('Active') && b.includes('Inactive')) return -1;
+            if (a.includes('Inactive') && b.includes('Active')) return 1;
+          }
+          if (groupBy1 === 'client') {
+            if (a === '' && b !== '') return -1;
+            if (a !== '' && b === '') return 1;
+          }
+          return a.localeCompare(b);
+        });
+        
+        for (const key of sortedGroupKeys) {
+          instancesInOrder.push(...groupedInstances[key]);
+        }
+        
+        // Open each instance link in a new tab with a small delay to avoid browser blocking
+        // Keep focus on the current window
+        instancesInOrder.forEach((instance, index) => {
+          if (instance.link) {
+            setTimeout(() => {
+              const newWindow = window.open(instance.link, '_blank', 'noopener,noreferrer');
+              // Try to keep focus on current window (browser may still switch, but this helps)
+              if (newWindow) {
+                window.focus();
+              }
+            }, index * 100); // 100ms delay between each tab
+          }
+        });
+        // Ensure focus returns to current window after opening all tabs
+        setTimeout(() => {
+          window.focus();
+        }, instancesInOrder.length * 100 + 100);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [groupedInstances, groupBy1]);
+
   // Show loading state while checking authentication
   if (checkingAuth) {
     return (
@@ -1493,55 +1648,74 @@ export default function HomePage() {
       <Stack gap="md" mb="xl">
         <Group gap="sm" align="flex-end" wrap="wrap">
           <FilterDropdown
+            ref={typeFilterRef}
             label="Type"
             data={typeOptions}
             selectedValues={typeFilter}
             onApply={setTypeFilter}
             onClear={() => setTypeFilter([])}
             searchPlaceholder="Search types"
+            onNavigateRight={() => clientFilterRef.current?.open()}
+            isLeftmost={true}
           />
           <FilterDropdown
+            ref={clientFilterRef}
             label="Client"
-                data={clientOptions}
-                selectedValues={clientFilter}
-                onApply={setClientFilter}
-                onClear={() => setClientFilter([])}
-                searchPlaceholder="Search clients"
-              />
-              <FilterDropdown
-                label="Project"
-                data={projectOptions}
-                selectedValues={projectFilter}
-                onApply={setProjectFilter}
-                onClear={() => setProjectFilter([])}
-                searchPlaceholder="Search projects"
-              />
-              <FilterDropdown
-                label="Feature"
-                data={flattenedFeatures}
-                selectedValues={selectedFeature}
-                onApply={setSelectedFeature}
-                onClear={() => setSelectedFeature([])}
-                searchPlaceholder="Search features"
-              />
-              <FilterDropdown
-                label="Status"
-                data={statusOptions}
-                selectedValues={statusFilter}
-                onApply={setStatusFilter}
-                onClear={() => setStatusFilter([])}
-                searchPlaceholder="Search status"
-              />
-              {userRole !== 'partner' && (
-                <FilterDropdown
-                  label="Starred"
-                  data={featuredOptions}
-                  selectedValues={featuredFilter}
-                  onApply={setFeaturedFilter}
-                  onClear={() => setFeaturedFilter([])}
-                  searchPlaceholder="Search"
-                />
-              )}
+            data={clientOptions}
+            selectedValues={clientFilter}
+            onApply={setClientFilter}
+            onClear={() => setClientFilter([])}
+            searchPlaceholder="Search clients"
+            onNavigateLeft={() => typeFilterRef.current?.open()}
+            onNavigateRight={() => projectFilterRef.current?.open()}
+          />
+          <FilterDropdown
+            ref={projectFilterRef}
+            label="Project"
+            data={projectOptions}
+            selectedValues={projectFilter}
+            onApply={setProjectFilter}
+            onClear={() => setProjectFilter([])}
+            searchPlaceholder="Search projects"
+            onNavigateLeft={() => clientFilterRef.current?.open()}
+            onNavigateRight={() => featureFilterRef.current?.open()}
+          />
+          <FilterDropdown
+            ref={featureFilterRef}
+            label="Feature"
+            data={flattenedFeatures}
+            selectedValues={selectedFeature}
+            onApply={setSelectedFeature}
+            onClear={() => setSelectedFeature([])}
+            searchPlaceholder="Search features"
+            onNavigateLeft={() => projectFilterRef.current?.open()}
+            onNavigateRight={() => statusFilterRef.current?.open()}
+          />
+          <FilterDropdown
+            ref={statusFilterRef}
+            label="Status"
+            data={statusOptions}
+            selectedValues={statusFilter}
+            onApply={setStatusFilter}
+            onClear={() => setStatusFilter([])}
+            searchPlaceholder="Search status"
+            onNavigateLeft={() => featureFilterRef.current?.open()}
+            onNavigateRight={() => userRole !== 'partner' && starredFilterRef.current?.open()}
+            isRightmost={userRole === 'partner'}
+          />
+          {userRole !== 'partner' && (
+            <FilterDropdown
+              ref={starredFilterRef}
+              label="Starred"
+              data={featuredOptions}
+              selectedValues={featuredFilter}
+              onApply={setFeaturedFilter}
+              onClear={() => setFeaturedFilter([])}
+              searchPlaceholder="Search"
+              onNavigateLeft={() => statusFilterRef.current?.open()}
+              isRightmost={true}
+            />
+          )}
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1715,14 +1889,19 @@ export default function HomePage() {
                         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         textDecoration: 'none',
                         backgroundColor: '#E0E4EB',
-                      }} 
+                        background: '#E0E4EB',
+                      } as React.CSSProperties} 
                       padding={0} 
                       radius="md" 
                       h="100%"
-                      component="a"
-                      href={instance.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (instance.link) {
+                          window.open(instance.link, '_blank', 'noopener,noreferrer');
+                          // Keep focus on current window
+                          window.focus();
+                        }
+                      }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                         e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -2016,14 +2195,19 @@ export default function HomePage() {
                                   transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                                   textDecoration: 'none',
                                   backgroundColor: '#E0E4EB',
-                                }} 
+                                  background: '#E0E4EB',
+                                } as React.CSSProperties} 
                                 padding={0} 
                                 radius="md" 
                                 h="100%"
-                                component="a"
-                                href={instance.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (instance.link) {
+                                    window.open(instance.link, '_blank', 'noopener,noreferrer');
+                                    // Keep focus on current window
+                                    window.focus();
+                                  }
+                                }}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                                   e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -2278,26 +2462,28 @@ export default function HomePage() {
             onChange={(value) => setFormClient(value || '')}
             clearable
             searchable
-            itemComponent={({ label, value, ...others }: any) => {
-              const clientLogo = others.logo;
-              const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-              const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
-              
-              return (
-                <Group gap="sm" align="center" {...others}>
-                  {logoPath && (
-                    <Image
-                      src={logoPath}
-                      alt={value}
-                      width={20}
-                      height={20}
-                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                    />
-                  )}
-                  <Text>{label}</Text>
-                </Group>
-              );
-            }}
+            {...({
+              itemComponent: ({ label, value, ...others }: any) => {
+                const clientLogo = others.logo;
+                const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+                const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+                
+                return (
+                  <Group gap="sm" align="center" {...others}>
+                    {logoPath && (
+                      <Image
+                        src={logoPath}
+                        alt={value}
+                        width={20}
+                        height={20}
+                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                      />
+                    )}
+                    <Text>{label}</Text>
+                  </Group>
+                );
+              }
+            } as any)}
             leftSection={formClient && clients[formClient]?.logo ? (() => {
               const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
               const logoPath = clients[formClient]!.logo!;

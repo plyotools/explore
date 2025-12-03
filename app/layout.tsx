@@ -61,8 +61,14 @@ export default function RootLayout({
           [data-mantine-color-scheme="dark"] .mantine-Card-root[data-with-border="true"],
           body[data-mantine-color-scheme="dark"] .mantine-Card-root,
           [data-mantine-color-scheme="dark"] .mantine-Card-root[data-shadow],
-          [data-mantine-color-scheme="dark"] a.mantine-Card-root {
+          [data-mantine-color-scheme="dark"] a.mantine-Card-root,
+          [data-mantine-color-scheme="dark"] .mantine-Card-root[data-shadow="sm"],
+          [data-mantine-color-scheme="dark"] .mantine-Card-root[data-shadow="md"],
+          [data-mantine-color-scheme="dark"] .mantine-Card-root[data-shadow="lg"],
+          [data-mantine-color-scheme="dark"] .mantine-Card-root[data-shadow="xl"],
+          [data-mantine-color-scheme="dark"] div.mantine-Card-root {
             background-color: #E0E4EB !important;
+            background: #E0E4EB !important;
             color: #19191B !important;
             border-color: rgba(25, 25, 27, 0.2) !important;
             margin: 0 !important;
