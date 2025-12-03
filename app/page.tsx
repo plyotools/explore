@@ -965,7 +965,7 @@ export default function HomePage() {
                 style={{ maxWidth: 220 }}
                 styles={{
                   input: {
-                    color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -978,7 +978,7 @@ export default function HomePage() {
                 style={{ maxWidth: 260 }}
                 styles={{
                   input: {
-                    color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -1303,7 +1303,7 @@ export default function HomePage() {
                 style={{ maxWidth: 220 }}
                 styles={{
                   input: {
-                    color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -1316,7 +1316,7 @@ export default function HomePage() {
                 style={{ maxWidth: 260 }}
                 styles={{
                   input: {
-                    color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -1416,7 +1416,7 @@ export default function HomePage() {
                   )}
                   <Grid gutter="md">
                     {groupInstances.map((instance, index) => (
-                      <Grid.Col key={instance.id} span="content">
+                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
                         <Card 
                       shadow="sm"
                       style={{ 
@@ -1641,7 +1641,7 @@ export default function HomePage() {
                 style={{ maxWidth: 220 }}
                 styles={{
                   input: {
-                    color: clientFilter ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -1654,7 +1654,7 @@ export default function HomePage() {
                 style={{ maxWidth: 260 }}
                 styles={{
                   input: {
-                    color: selectedFeature ? 'var(--mantine-color-text) !important' : 'rgba(255, 255, 255, 0.5) !important',
+                    color: 'var(--mantine-color-text) !important',
                   },
                 }}
               />
@@ -1754,7 +1754,7 @@ export default function HomePage() {
                   )}
                   <Grid gutter="md">
                     {groupInstances.map((instance, index) => (
-                      <Grid.Col key={instance.id} span="content">
+                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
                         <Card 
                       shadow="sm"
                       style={{ 
