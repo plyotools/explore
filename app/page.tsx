@@ -6,7 +6,6 @@ import * as TablerIcons from '@tabler/icons-react';
 import {
   Container,
   Title,
-  Tabs,
   Card,
   Text,
   Badge,
@@ -40,6 +39,13 @@ const pulseKeyframes = `
       opacity: 0.7;
       transform: scale(1.1);
     }
+  }
+  
+  .no-border-tabs,
+  .no-border-tabs::after,
+  .no-border-tabs::before {
+    border-bottom: none !important;
+    border: none !important;
   }
 `;
 import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck, IconDotsVertical } from '@tabler/icons-react';
@@ -126,6 +132,7 @@ function FilterDropdown({
   const [pendingValues, setPendingValues] = useState<string[]>(selectedValues);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // Update pending values when selectedValues change externally
@@ -133,11 +140,13 @@ function FilterDropdown({
     setPendingValues(selectedValues);
   }, [selectedValues]);
 
-  // Focus input when popover opens
+  // Focus dropdown when popover opens to enable keyboard navigation
   useEffect(() => {
-    if (opened && searchInputRef.current) {
+    if (opened) {
       setTimeout(() => {
-        searchInputRef.current?.focus();
+        if (dropdownRef.current) {
+          dropdownRef.current.focus();
+        }
       }, 100);
     }
   }, [opened]);
@@ -157,17 +166,18 @@ function FilterDropdown({
   }, [data, searchTerm]);
 
   const handleToggle = (value: string) => {
-    setPendingValues(prev => 
-      prev.includes(value) 
-        ? prev.filter(v => v !== value)
-        : [...prev, value]
-    );
+    const newValues = pendingValues.includes(value) 
+      ? pendingValues.filter(v => v !== value)
+      : [...pendingValues, value];
+    setPendingValues(newValues);
+    // Apply immediately
+    onApply(newValues);
   };
 
-  const handleApply = () => {
-    onApply(pendingValues);
+  const handleClose = () => {
     setOpened(false);
     setSearchTerm('');
+    setHighlightedIndex(0);
   };
 
   const handleClear = () => {
@@ -175,12 +185,6 @@ function FilterDropdown({
     onClear();
     setOpened(false);
     setSearchTerm('');
-  };
-
-  const handleClose = () => {
-    setOpened(false);
-    setSearchTerm('');
-    setPendingValues(selectedValues); // Reset to current selected values
     setHighlightedIndex(0);
   };
 
@@ -200,7 +204,7 @@ function FilterDropdown({
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      handleApply();
+      handleClose();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       handleClose();
@@ -242,7 +246,15 @@ function FilterDropdown({
           {label}
         </Button>
       </Popover.Target>
-      <Popover.Dropdown style={{ padding: 0, backgroundColor: '#E0E4EB', minWidth: 280, borderRadius: '8px', overflow: 'hidden' }}>
+      <Popover.Dropdown 
+        style={{ padding: 0, backgroundColor: '#E0E4EB', minWidth: 280, borderRadius: '8px', overflow: 'hidden' }}
+      >
+        <div
+          ref={dropdownRef}
+          onKeyDown={handleKeyDown}
+          tabIndex={0}
+          style={{ outline: 'none' }}
+        >
         <Stack gap={0}>
           <Box p="md" style={{ backgroundColor: '#8027F4', borderBottom: 'none' }}>
             <TextInput
@@ -250,7 +262,12 @@ function FilterDropdown({
               placeholder={searchPlaceholder}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.currentTarget.value)}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => {
+                // Allow typing in search, but handle navigation keys
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
+                  handleKeyDown(e);
+                }
+              }}
               leftSection={<IconSearch size={16} style={{ color: '#FFFFFF' }} />}
               size="sm"
               style={{ 
@@ -415,22 +432,16 @@ function FilterDropdown({
             </Group>
             <Group justify="flex-end">
               <Button
-                variant="subtle"
                 onClick={handleClose}
-                size="sm"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleApply}
                 size="sm"
                 style={{ backgroundColor: '#8027F4' }}
               >
-                Apply
+                Close
               </Button>
             </Group>
           </Box>
         </Stack>
+        </div>
       </Popover.Dropdown>
     </Popover>
   );
@@ -477,7 +488,7 @@ export default function HomePage() {
   const router = useRouter();
   const [instances, setInstances] = useState<ExploreInstance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<InstanceType | 'All'>('All');
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [selectedFeature, setSelectedFeature] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [clientFilter, setClientFilter] = useState<string[]>([]);
@@ -979,7 +990,10 @@ export default function HomePage() {
     await fetch('/api/auth/', { method: 'DELETE' });
     setAuthenticated(false);
     setIsAdmin(false);
-    router.push('/login');
+    if (typeof window !== 'undefined') {
+      const basePath = window.location.pathname.startsWith('/explore') ? '/explore' : '';
+      window.location.replace(`${basePath}/login`);
+    }
   };
 
   // Removed handleFileChange - only paste is supported now
@@ -1174,10 +1188,10 @@ export default function HomePage() {
 
   const filteredInstances = useMemo(() => {
     return instances.filter((instance) => {
-      // Partner role: only show featured instances
+      // Partner role: only show starred instances
       if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
       
-      if (activeTab !== 'All' && instance.type !== activeTab) return false;
+      if (typeFilter.length > 0 && !typeFilter.includes(instance.type)) return false;
       if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
       if (statusFilter.length > 0) {
         const statusMatch = statusFilter.some(status => {
@@ -1199,7 +1213,7 @@ export default function HomePage() {
       }
       return true;
     });
-  }, [instances, activeTab, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
+  }, [instances, typeFilter, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
 
   const clientOptions = useMemo(() => {
     const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
@@ -1227,6 +1241,11 @@ export default function HomePage() {
     ).sort((a, b) => a.localeCompare(b));
     return uniqueProjects.map((name) => ({ value: name, label: name }));
   }, [instances]);
+
+  const typeOptions = useMemo(() => [
+    { value: 'Apartment Chooser', label: 'Apartment Chooser' },
+    { value: 'Virtual Showroom', label: 'Virtual Showroom' },
+  ], []);
 
   const statusOptions = useMemo(() => [
     { value: 'active', label: 'Active' },
@@ -1271,8 +1290,6 @@ export default function HomePage() {
     return groupedFeatures.flatMap(group => group.items);
   }, [groupedFeatures]);
 
-  const showroomInstances = useMemo(() => instances.filter((i) => i.type === 'Virtual Showroom'), [instances]);
-  const apartmentInstances = useMemo(() => instances.filter((i) => i.type === 'Apartment Chooser'), [instances]);
 
   // Grouping logic
   const getGroupKey = (instance: ExploreInstance, groupBy: 'client' | 'status' | 'feature'): string => {
@@ -1346,7 +1363,8 @@ export default function HomePage() {
   if (!authenticated && !checkingAuth) {
     // Use replace instead of href to avoid adding to history
     if (typeof window !== 'undefined') {
-      window.location.replace('/login');
+      const basePath = window.location.pathname.startsWith('/explore') ? '/explore' : '';
+      window.location.replace(`${basePath}/login`);
     }
     return null;
   }
@@ -1374,6 +1392,75 @@ export default function HomePage() {
           </Title>
         </Group>
         <Group gap="md" style={{ position: 'absolute', top: 0, right: 0 }}>
+          {isAdmin && (
+            <>
+              <Menu shadow="md" width={200}>
+              <Menu.Target>
+                <Button
+                  variant="light"
+                  color="purple"
+                  leftSection={<IconDotsVertical size={16} />}
+                  size="sm"
+                  styles={{
+                    root: {
+                      backgroundColor: 'transparent',
+                      '&:hover': {
+                        backgroundColor: 'transparent',
+                      },
+                    },
+                  }}
+                >
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconSettings size={16} />}
+                  onClick={async () => {
+                    const migratedFeatures = await loadFeatures();
+                    if (migratedFeatures) {
+                      setEditingFeatures(migratedFeatures);
+                      // Extract colors and icons from features
+                      const colors: Record<string, string> = {};
+                      const icons: Record<string, string> = {};
+                      Object.values(migratedFeatures).forEach(typeFeatures => {
+                        typeFeatures.forEach((feature: FeatureWithColor) => {
+                          colors[feature.name] = feature.color;
+                          if (feature.icon) {
+                            icons[feature.name] = feature.icon;
+                          }
+                        });
+                      });
+                      setFeatureColors(colors);
+                      setFeatureIcons(icons);
+                      setFeaturesModalOpened(true);
+                    }
+                  }}
+                >
+                  Features
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconPalette size={16} />}
+                  onClick={() => {
+                    setEditingPalette([...colorPalette]);
+                    setPaletteModalOpened(true);
+                  }}
+                >
+                  Colors
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconBuilding size={16} />}
+                  onClick={async () => {
+                    const loadedClients = await loadClients();
+                    setEditingClients(loadedClients || {});
+                    setClientsModalOpened(true);
+                  }}
+                >
+                  Clients
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+            </>
+          )}
           <Text
             component="a"
             href="#"
@@ -1386,108 +1473,35 @@ export default function HomePage() {
           >
             Log out
           </Text>
+          {isAdmin && (
+            <Button
+              leftSection={<IconPlus size={16} />}
+              onClick={() => {
+                resetForm();
+                setModalOpened(true);
+              }}
+              size="sm"
+              variant="filled"
+              color="purple"
+            >
+              Add New
+            </Button>
+          )}
         </Group>
       </Box>
 
-      {isAdmin && (
-        <Group mb="xl" gap="sm">
-          <Button
-            leftSection={<IconPlus size={16} />}
-            onClick={() => {
-              resetForm();
-              setModalOpened(true);
-            }}
-            size="sm"
-            variant="filled"
-            color="purple"
-          >
-            Add New
-          </Button>
-          <Menu shadow="md" width={200}>
-            <Menu.Target>
-              <Button
-                variant="light"
-                color="purple"
-                leftSection={<IconDotsVertical size={16} />}
-                size="sm"
-              >
-              </Button>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconSettings size={16} />}
-                onClick={async () => {
-                  const migratedFeatures = await loadFeatures();
-                  if (migratedFeatures) {
-                    setEditingFeatures(migratedFeatures);
-                    // Extract colors and icons from features
-                    const colors: Record<string, string> = {};
-                    const icons: Record<string, string> = {};
-                    Object.values(migratedFeatures).forEach(typeFeatures => {
-                      typeFeatures.forEach((feature: FeatureWithColor) => {
-                        colors[feature.name] = feature.color;
-                        if (feature.icon) {
-                          icons[feature.name] = feature.icon;
-                        }
-                      });
-                    });
-                    setFeatureColors(colors);
-                    setFeatureIcons(icons);
-                    setFeaturesModalOpened(true);
-                  }
-                }}
-              >
-                Features
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconPalette size={16} />}
-                onClick={() => {
-                  setEditingPalette([...colorPalette]);
-                  setPaletteModalOpened(true);
-                }}
-              >
-                Colors
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconBuilding size={16} />}
-                onClick={async () => {
-                  const loadedClients = await loadClients();
-                  setEditingClients(loadedClients || {});
-                  setClientsModalOpened(true);
-                }}
-              >
-                Clients
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-        </Group>
-      )}
-
-      <Tabs
-        value={activeTab}
-        onChange={(value) => {
-          setActiveTab(value as InstanceType | 'All');
-          setSelectedFeature([]);
-        }}
-        mb="xl"
-      >
-        <Tabs.List justify="center">
-          <Tabs.Tab value="All">
-            All ({instances.length})
-          </Tabs.Tab>
-          <Tabs.Tab value="Apartment Chooser">
-            Apartment Chooser ({apartmentInstances.length})
-          </Tabs.Tab>
-          <Tabs.Tab value="Virtual Showroom">
-            Virtual Showroom ({showroomInstances.length})
-          </Tabs.Tab>
-        </Tabs.List>
-
-        <Tabs.Panel value="All" pt="xl">
-          <Stack gap="md">
-            <Group gap="sm" align="flex-end" wrap="wrap">
-              <FilterDropdown
-                label="Filter by client"
+      <Stack gap="md" mb="xl">
+        <Group gap="sm" align="flex-end" wrap="wrap">
+          <FilterDropdown
+            label="Type"
+            data={typeOptions}
+            selectedValues={typeFilter}
+            onApply={setTypeFilter}
+            onClear={() => setTypeFilter([])}
+            searchPlaceholder="Search types"
+          />
+          <FilterDropdown
+            label="Client"
                 data={clientOptions}
                 selectedValues={clientFilter}
                 onApply={setClientFilter}
@@ -1495,7 +1509,7 @@ export default function HomePage() {
                 searchPlaceholder="Search clients"
               />
               <FilterDropdown
-                label="Filter by project"
+                label="Project"
                 data={projectOptions}
                 selectedValues={projectFilter}
                 onApply={setProjectFilter}
@@ -1503,7 +1517,7 @@ export default function HomePage() {
                 searchPlaceholder="Search projects"
               />
               <FilterDropdown
-                label="Filter by feature"
+                label="Feature"
                 data={flattenedFeatures}
                 selectedValues={selectedFeature}
                 onApply={setSelectedFeature}
@@ -1511,7 +1525,7 @@ export default function HomePage() {
                 searchPlaceholder="Search features"
               />
               <FilterDropdown
-                label="Filter by status"
+                label="Status"
                 data={statusOptions}
                 selectedValues={statusFilter}
                 onApply={setStatusFilter}
@@ -1520,7 +1534,7 @@ export default function HomePage() {
               />
               {userRole !== 'partner' && (
                 <FilterDropdown
-                  label="Filter by featured"
+                  label="Starred"
                   data={featuredOptions}
                   selectedValues={featuredFilter}
                   onApply={setFeaturedFilter}
@@ -1567,8 +1581,16 @@ export default function HomePage() {
               )}
             </Group>
             {/* Filter Tags Row */}
-            {(clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
+            {(typeFilter.length > 0 || clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
               <Group gap="xs" wrap="wrap">
+                {typeFilter.map((type) => (
+                  <FilterTag
+                    key={`type-${type}`}
+                    label="Type"
+                    value={type}
+                    onRemove={() => setTypeFilter(typeFilter.filter(t => t !== type))}
+                  />
+                ))}
                 {clientFilter.map((client) => (
                   <FilterTag
                     key={`client-${client}`}
@@ -1609,7 +1631,7 @@ export default function HomePage() {
                   return (
                     <FilterTag
                       key={`featured-${featured}`}
-                      label="Featured"
+                      label="Starred"
                       value={featuredLabel}
                       onRemove={() => setFeaturedFilter(featuredFilter.filter(f => f !== featured))}
                     />
@@ -1651,27 +1673,29 @@ export default function HomePage() {
                   
                   return (
                     <Stack gap="md">
-                      <Group gap="sm" align="center">
-                        <Text fw={500} size="lg">
-                          {groupKey.includes(' | ') ? (
-                            <>
-                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                            </>
-                          ) : (
-                            displayKey
+                      {displayKey !== 'All Projects' && groupKey !== '' && (
+                        <Group gap="sm" align="center">
+                          <Text fw={500} size="lg">
+                            {groupKey.includes(' | ') ? (
+                              <>
+                                {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                              </>
+                            ) : (
+                              displayKey
+                            )}
+                          </Text>
+                          {logoPath && (
+                            <Image
+                              src={logoPath}
+                              alt={clientName || ''}
+                              width={24}
+                              height={24}
+                              style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
+                            />
                           )}
-                        </Text>
-                        {logoPath && (
-                          <Image
-                            src={logoPath}
-                            alt={clientName || ''}
-                            width={24}
-                            height={24}
-                            style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
-                          />
-                        )}
-                        <Badge size="sm" variant="light">{groupInstances.length}</Badge>
-                      </Group>
+                          <Badge size="sm" variant="light">{groupInstances.length}</Badge>
+                        </Group>
+                      )}
                       <Box
                         style={{
                           display: 'grid',
@@ -1805,18 +1829,6 @@ export default function HomePage() {
                         <Box px="lg" pb="lg">
                           <Stack gap="sm">
                             <Group gap={6} align="center" wrap="nowrap">
-                              <Badge
-                                size="sm"
-                                variant={instance.active === false ? 'light' : 'filled'}
-                                color={instance.active === false ? 'red' : 'green'}
-                                style={{
-                                  animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
-                                  flexShrink: 0,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {instance.active === false ? 'Inactive' : 'Active'}
-                              </Badge>
                               <Title order={4} style={{ flex: 1, minWidth: 0 }}>
                                 {instance.name}
                               </Title>
@@ -1854,6 +1866,20 @@ export default function HomePage() {
                                   </ActionIcon>
                                 </Group>
                               )}
+                              <Badge
+                                size="sm"
+                                variant={instance.active === false ? 'light' : 'filled'}
+                                color={instance.active === false ? 'red' : 'green'}
+                                style={{
+                                  animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
+                                  flexShrink: 0,
+                                  fontWeight: 600,
+                                  backgroundColor: instance.active === false ? '#60646B' : undefined,
+                                  color: instance.active === false ? '#fff' : undefined,
+                                }}
+                              >
+                                {instance.active === false ? 'Inactive' : 'Active'}
+                              </Badge>
                             </Group>
                             {instance.client && (
                               <Group gap={8} align="center">
@@ -1936,6 +1962,10 @@ export default function HomePage() {
                             const clientLogo = clientName && clients[clientName]?.logo;
                             const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
                             
+                            if (displayKey === 'All Projects' || groupKey === '') {
+                              return null;
+                            }
+                            
                             return (
                               <>
                                 <Text fw={500} size="lg">
@@ -1959,7 +1989,9 @@ export default function HomePage() {
                               </>
                             );
                           })()}
-                          <Badge size="sm" variant="light">{groupInstances.length}</Badge>
+                          {groupKey !== '' && groupKey !== undefined && (
+                            <Badge size="sm" variant="light">{groupInstances.length}</Badge>
+                          )}
                         </Group>
                       </Accordion.Control>
                       <Accordion.Panel>
@@ -2098,18 +2130,6 @@ export default function HomePage() {
                                   <Box px="lg" pb="lg">
                                     <Stack gap="sm">
                                       <Group gap={6} align="center" wrap="nowrap">
-                                        <Badge
-                                          size="sm"
-                                          variant={instance.active === false ? 'light' : 'filled'}
-                                          color={instance.active === false ? 'red' : 'green'}
-                                          style={{
-                                            animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
-                                            flexShrink: 0,
-                                            fontWeight: 600,
-                                          }}
-                                        >
-                                          {instance.active === false ? 'Inactive' : 'Active'}
-                                        </Badge>
                                         <Title order={4} style={{ flex: 1, minWidth: 0 }}>
                                           {instance.name}
                                         </Title>
@@ -2147,6 +2167,20 @@ export default function HomePage() {
                                             </ActionIcon>
                                           </Group>
                                         )}
+                                        <Badge
+                                          size="sm"
+                                          variant={instance.active === false ? 'light' : 'filled'}
+                                          color={instance.active === false ? 'red' : 'green'}
+                                          style={{
+                                            animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
+                                            flexShrink: 0,
+                                            fontWeight: 600,
+                                            backgroundColor: instance.active === false ? '#60646B' : undefined,
+                                            color: instance.active === false ? '#fff' : undefined,
+                                          }}
+                                        >
+                                          {instance.active === false ? 'Inactive' : 'Active'}
+                                        </Badge>
                                       </Group>
                                       {instance.client && (
                                         <Group gap={8} align="center">
@@ -2214,1460 +2248,6 @@ export default function HomePage() {
               </Grid>
             )}
           </Stack>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="Apartment Chooser" pt="xl">
-          <Stack gap="md">
-            <Group gap="sm" align="flex-end" wrap="wrap">
-              <FilterDropdown
-                label="Filter by client"
-                data={clientOptions}
-                selectedValues={clientFilter}
-                onApply={setClientFilter}
-                onClear={() => setClientFilter([])}
-                searchPlaceholder="Search clients"
-              />
-              <FilterDropdown
-                label="Filter by project"
-                data={projectOptions}
-                selectedValues={projectFilter}
-                onApply={setProjectFilter}
-                onClear={() => setProjectFilter([])}
-                searchPlaceholder="Search projects"
-              />
-              <FilterDropdown
-                label="Filter by feature"
-                data={flattenedFeatures}
-                selectedValues={selectedFeature}
-                onApply={setSelectedFeature}
-                onClear={() => setSelectedFeature([])}
-                searchPlaceholder="Search features"
-              />
-              <FilterDropdown
-                label="Filter by status"
-                data={statusOptions}
-                selectedValues={statusFilter}
-                onApply={setStatusFilter}
-                onClear={() => setStatusFilter([])}
-                searchPlaceholder="Search status"
-              />
-              {userRole !== 'partner' && (
-                <FilterDropdown
-                  label="Filter by featured"
-                  data={featuredOptions}
-                  selectedValues={featuredFilter}
-                  onApply={setFeaturedFilter}
-                  onClear={() => setFeaturedFilter([])}
-                  searchPlaceholder="Search"
-                />
-              )}
-              <Select
-                placeholder="Group by..."
-                data={[
-                  { value: 'none', label: 'No grouping' },
-                  { value: 'client', label: 'Client' },
-                  { value: 'status', label: 'Status' },
-                  { value: 'feature', label: 'Feature' },
-                ]}
-                value={groupBy1}
-                onChange={(value) => {
-                  setGroupBy1((value as 'none' | 'client' | 'status' | 'feature') || 'none');
-                  if (value === groupBy2) setGroupBy2('none');
-                }}
-                variant="unstyled"
-                className="filter-text-link"
-                style={{ maxWidth: 160 }}
-                styles={filterDropdownStyles}
-              />
-              {groupBy1 !== 'none' && (
-                <Select
-                  placeholder="Then by..."
-                  data={[
-                    { value: 'none', label: 'None' },
-                    ...(groupBy1 !== 'client' ? [{ value: 'client', label: 'Client' }] : []),
-                    ...(groupBy1 !== 'status' ? [{ value: 'status', label: 'Status' }] : []),
-                    ...(groupBy1 !== 'feature' ? [{ value: 'feature', label: 'Feature' }] : []),
-                  ]}
-                  value={groupBy2}
-                  onChange={(value) =>
-                    setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
-                  }
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 160 }}
-                  styles={filterDropdownStyles}
-                />
-              )}
-            </Group>
-            {/* Filter Tags Row */}
-            {(clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
-              <Group gap="xs" wrap="wrap">
-                {clientFilter.map((client) => (
-                  <FilterTag
-                    key={`client-${client}`}
-                    label="Client"
-                    value={client}
-                    onRemove={() => setClientFilter(clientFilter.filter(c => c !== client))}
-                  />
-                ))}
-                {projectFilter.map((project) => (
-                  <FilterTag
-                    key={`project-${project}`}
-                    label="Project"
-                    value={project}
-                    onRemove={() => setProjectFilter(projectFilter.filter(p => p !== project))}
-                  />
-                ))}
-                {selectedFeature.map((feature) => (
-                  <FilterTag
-                    key={`feature-${feature}`}
-                    label="Feature"
-                    value={feature}
-                    onRemove={() => setSelectedFeature(selectedFeature.filter(f => f !== feature))}
-                  />
-                ))}
-                {statusFilter.map((status) => {
-                  const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
-                  return (
-                    <FilterTag
-                      key={`status-${status}`}
-                      label="Status"
-                      value={statusLabel}
-                      onRemove={() => setStatusFilter(statusFilter.filter(s => s !== status))}
-                    />
-                  );
-                })}
-                {featuredFilter.map((featured) => {
-                  const featuredLabel = featuredOptions.find(opt => opt.value === featured)?.label || featured;
-                  return (
-                    <FilterTag
-                      key={`featured-${featured}`}
-                      label="Featured"
-                      value={featuredLabel}
-                      onRemove={() => setFeaturedFilter(featuredFilter.filter(f => f !== featured))}
-                    />
-                  );
-                })}
-              </Group>
-            )}
-            {Object.keys(groupedInstances).length > 0 ? (
-              Object.keys(groupedInstances).length === 1 ? (
-                // Single group: render without accordion
-                (() => {
-                  const [groupKey, groupInstances] = Object.entries(groupedInstances)[0];
-                  const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                  let displayKey = groupKey;
-                  let clientName: string | null = null;
-                  
-                  if (groupKey.includes(' | ')) {
-                    const parts = groupKey.split(' | ');
-                    if (groupBy1 === 'client' && parts[0]) {
-                      clientName = parts[0];
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    } else if (groupBy2 === 'client' && parts[1]) {
-                      clientName = parts[1];
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    } else {
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    }
-                  } else {
-                    if (groupBy1 === 'client') {
-                      clientName = groupKey || null;
-                      displayKey = groupKey || 'No Client';
-                    } else {
-                      displayKey = groupKey || 'All Projects';
-                    }
-                  }
-                  
-                  const clientLogo = clientName && clients[clientName]?.logo;
-                  const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
-                  
-                  return (
-                    <Stack gap="md">
-                      <Group gap="sm" align="center">
-                        <Text fw={500} size="lg">
-                          {groupKey.includes(' | ') ? (
-                            <>
-                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                            </>
-                          ) : (
-                            displayKey
-                          )}
-                        </Text>
-                        {logoPath && (
-                          <Image
-                            src={logoPath}
-                            alt={clientName || ''}
-                            width={24}
-                            height={24}
-                            style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
-                          />
-                        )}
-                        <Badge size="sm" variant="light">{groupInstances.length}</Badge>
-                      </Group>
-                      <Box
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                          gap: '16px',
-                          width: '100%',
-                        }}
-                      >
-                        {groupInstances.map((instance, index) => (
-                          <Card
-                            key={instance.id} 
-                      shadow="sm"
-                      style={{ 
-                        width: '100%',
-                        maxWidth: '100%',
-                        cursor: 'pointer',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                        textDecoration: 'none',
-                        backgroundColor: '#E0E4EB',
-                      }} 
-                      padding={0} 
-                      radius="md" 
-                      h="100%"
-                      component="a"
-                      href={instance.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
-                        e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1) translateY(0)';
-                        e.currentTarget.style.boxShadow = 'var(--mantine-shadow-sm)';
-                      }}
-                    >
-                      <Stack gap="sm">
-                        <Box
-                          style={{ 
-                            width: '100%', 
-                            aspectRatio: '4 / 3', 
-                            overflow: 'hidden', 
-                            borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0', 
-                            position: 'relative'
-                          }}
-                        >
-                          <Image
-                            src={(instance.screenshot && instance.screenshot.trim()) ? (basePath && !instance.screenshot.startsWith(basePath) ? `${basePath}${instance.screenshot}` : instance.screenshot) : (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
-                            alt={instance.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', backgroundColor: 'var(--mantine-color-gray-1)' }}
-                            loading={index < 6 ? 'eager' : 'lazy'}
-                            decoding="async"
-                            fetchPriority={index < 3 ? 'high' : 'auto'}
-                            onError={(e) => {
-                              // Fallback to placeholder if screenshot fails to load
-                              const target = e.target as HTMLImageElement;
-                              const placeholderSrc = basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE;
-                              // Only retry once to avoid infinite loop
-                              if (!target.dataset.retried && target.src !== placeholderSrc) {
-                                target.dataset.retried = 'true';
-                                target.src = placeholderSrc;
-                              }
-                            }}
-                          />
-                          {userRole !== 'partner' && (
-                            <ActionIcon
-                              variant="filled"
-                              color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
-                              size="sm"
-                              style={{
-                                position: 'absolute',
-                                top: 8,
-                                right: 8,
-                                zIndex: 10,
-                                backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
-                              }}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                toggleFeatured(instance.id);
-                              }}
-                            >
-                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-                            </ActionIcon>
-                          )}
-                          {instance.features.length > 0 && (
-                            <Box
-                              style={{
-                                position: 'absolute',
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                background: 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%)',
-                                padding: '1rem',
-                              }}
-                            >
-                              <Group gap="xs">
-                                {instance.features.map((feature) => {
-                                  const featureColor = featureColors[feature];
-                                  const featureIcon = getFeatureIcon(feature);
-                                  const isDark = featureColor ? isColorDark(featureColor) : false;
-                                  let IconComponent = null;
-                                  if (featureIcon) {
-                                    try {
-                                      IconComponent = (TablerIcons as any)[featureIcon];
-                                    } catch (e) {
-                                      // Icon not found, silently continue
-                                    }
-                                  }
-                                  return (
-                                    <Badge 
-                                      key={feature} 
-                                      size="sm" 
-                                      variant="light" 
-                                      styles={{
-                                        root: {
-                                          backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                          color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
-                                        },
-                                      }}
-                                      leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
-                                    >
-                                      {feature}
-                                    </Badge>
-                                  );
-                                })}
-                              </Group>
-                            </Box>
-                          )}
-                        </Box>
-                        <Box px="lg" pb="lg">
-                          <Stack gap="sm">
-                            <Group gap={6} align="center" wrap="nowrap">
-                              <Badge
-                                size="sm"
-                                variant={instance.active === false ? 'light' : 'filled'}
-                                color={instance.active === false ? 'red' : 'green'}
-                                style={{
-                                  animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
-                                  flexShrink: 0,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {instance.active === false ? 'Inactive' : 'Active'}
-                              </Badge>
-                              <Title order={4} style={{ flex: 1, minWidth: 0 }}>
-                                {instance.name}
-                              </Title>
-                              {isAdmin && (
-                                <Group gap={4}>
-                                  <ActionIcon
-                                    variant="subtle"
-                                    color="gray"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      openEditModal(instance);
-                                    }}
-                                    size="sm"
-                                    style={{
-                                      color: 'rgba(25, 25, 27, 0.7)',
-                                    }}
-                                  >
-                                    <IconEdit size={16} />
-                                  </ActionIcon>
-                                  <ActionIcon
-                                    variant="subtle"
-                                    color="red"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      handleDeleteClick(instance);
-                                    }}
-                                    size="sm"
-                                    style={{
-                                      color: 'rgba(220, 38, 38, 0.7)',
-                                    }}
-                                  >
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                </Group>
-                              )}
-                            </Group>
-                            {instance.client && (
-                              <Group gap={8} align="center">
-                                {clients[instance.client]?.logo && (() => {
-                                  const logoPath = clients[instance.client]!.logo!;
-                                  return (
-                                    <Image
-                                      src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
-                                      alt={instance.client}
-                                      width={16}
-                                      height={16}
-                                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                    />
-                                  );
-                                })()}
-                                <Text size="xs" c="dimmed">
-                                  {instance.client}
-                                </Text>
-                              </Group>
-                            )}
-                            {instance.description && (
-                              <Text
-                                size="sm"
-                                c="dimmed"
-                                lineClamp={2}
-                                style={{
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  display: '-webkit-box',
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: 'vertical',
-                                }}
-                              >
-                                {instance.description}
-                              </Text>
-                            )}
-                          </Stack>
-                        </Box>
-                      </Stack>
-                          </Card>
-                        ))}
-                      </Box>
-                    </Stack>
-                  );
-                })()
-              ) : (
-                // Multiple groups: use accordion
-                <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
-                  {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
-                    const accordionValue = groupKey || `group-${index}`;
-                    return (
-                    <Accordion.Item key={accordionValue} value={accordionValue}>
-                      <Accordion.Control>
-                        <Group gap="sm" align="center">
-                          {(() => {
-                            const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                            let displayKey = groupKey;
-                            let clientName: string | null = null;
-                            
-                            if (groupKey.includes(' | ')) {
-                              const parts = groupKey.split(' | ');
-                              if (groupBy1 === 'client' && parts[0]) {
-                                clientName = parts[0];
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              } else if (groupBy2 === 'client' && parts[1]) {
-                                clientName = parts[1];
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              } else {
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              }
-                            } else {
-                              if (groupBy1 === 'client') {
-                                clientName = groupKey || null;
-                                displayKey = groupKey || 'No Client';
-                              } else {
-                                displayKey = groupKey || 'All Projects';
-                              }
-                            }
-                            
-                            const clientLogo = clientName && clients[clientName]?.logo;
-                            const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
-                            
-                            return (
-                              <>
-                                <Text fw={500} size="lg">
-                                  {groupKey.includes(' | ') ? (
-                                    <>
-                                      {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                                    </>
-                                  ) : (
-                                    displayKey
-                                  )}
-                                </Text>
-                                {logoPath && (
-                                  <Image
-                                    src={logoPath}
-                                    alt={clientName || ''}
-                                    width={24}
-                                    height={24}
-                                    style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
-                                  />
-                                )}
-                              </>
-                            );
-                          })()}
-                          <Badge size="sm" variant="light">{groupInstances.length}</Badge>
-                        </Group>
-                      </Accordion.Control>
-                      <Accordion.Panel>
-                        <Box
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                            gap: '16px',
-                            width: '100%',
-                          }}
-                        >
-                          {groupInstances.length > 0 ? groupInstances.map((instance, index) => {
-                            const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                            return (
-                              <Card
-                                key={instance.id} 
-                                shadow="sm"
-                                style={{ 
-                                  width: '100%',
-                                  maxWidth: '100%',
-                                  cursor: 'pointer',
-                                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                                  textDecoration: 'none',
-                                  backgroundColor: '#E0E4EB',
-                                }} 
-                                padding={0} 
-                                radius="md" 
-                                h="100%"
-                                component="a"
-                                href={instance.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
-                                  e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1) translateY(0)';
-                                  e.currentTarget.style.boxShadow = 'var(--mantine-shadow-sm)';
-                                }}
-                              >
-                                <Stack gap="sm">
-                                  <Box
-                                    style={{ 
-                                      width: '100%', 
-                                      aspectRatio: '4 / 3', 
-                                      overflow: 'hidden', 
-                                      borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0', 
-                                      position: 'relative'
-                                    }}
-                                  >
-                                    <Image
-                                      src={(instance.screenshot && instance.screenshot.trim()) ? (basePath && !instance.screenshot.startsWith(basePath) ? `${basePath}${instance.screenshot}` : instance.screenshot) : (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
-                                      alt={instance.name}
-                                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', backgroundColor: 'var(--mantine-color-gray-1)' }}
-                                      loading={index < 6 ? 'eager' : 'lazy'}
-                                      decoding="async"
-                                      fetchPriority={index < 3 ? 'high' : 'auto'}
-                                      onError={(e) => {
-                                        // Fallback to placeholder if screenshot fails to load
-                                        const target = e.target as HTMLImageElement;
-                                        const placeholderSrc = basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE;
-                                        // Only retry once to avoid infinite loop
-                                        if (!target.dataset.retried && target.src !== placeholderSrc) {
-                                          target.dataset.retried = 'true';
-                                          target.src = placeholderSrc;
-                                        }
-                                      }}
-                                    />
-                                    {userRole !== 'partner' && (
-                                      <ActionIcon
-                                        variant="filled"
-                                        color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
-                                        size="sm"
-                                        style={{
-                                          position: 'absolute',
-                                          top: 8,
-                                          right: 8,
-                                          zIndex: 10,
-                                          backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
-                                        }}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          toggleFeatured(instance.id);
-                                        }}
-                                      >
-                                        {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-                                      </ActionIcon>
-                                    )}
-                                    {instance.features.length > 0 && (
-                                      <Box
-                                        style={{
-                                          position: 'absolute',
-                                          bottom: 0,
-                                          left: 0,
-                                          right: 0,
-                                          background: 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%)',
-                                          padding: '1rem',
-                                        }}
-                                      >
-                                        <Group gap="xs">
-                                          {instance.features.map((feature) => {
-                                            const featureColor = featureColors[feature];
-                                            const featureIcon = getFeatureIcon(feature);
-                                            const isDark = featureColor ? isColorDark(featureColor) : false;
-                                            let IconComponent = null;
-                                            if (featureIcon) {
-                                              try {
-                                                IconComponent = (TablerIcons as any)[featureIcon];
-                                              } catch (e) {
-                                                // Icon not found, silently continue
-                                              }
-                                            }
-                                            return (
-                                              <Badge 
-                                                key={feature} 
-                                                size="sm" 
-                                                variant="light" 
-                                                styles={{
-                                                  root: {
-                                                    backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                                    color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
-                                                  },
-                                                }}
-                                                leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
-                                              >
-                                                {feature}
-                                              </Badge>
-                                            );
-                                          })}
-                                        </Group>
-                                      </Box>
-                                    )}
-                                  </Box>
-                                  <Box px="lg" pb="lg">
-                                    <Stack gap="sm">
-                                      <Group gap={6} align="center" wrap="nowrap">
-                                        <Badge
-                                          size="sm"
-                                          variant={instance.active === false ? 'light' : 'filled'}
-                                          color={instance.active === false ? 'red' : 'green'}
-                                          style={{
-                                            animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
-                                            flexShrink: 0,
-                                            fontWeight: 600,
-                                          }}
-                                        >
-                                          {instance.active === false ? 'Inactive' : 'Active'}
-                                        </Badge>
-                                        <Title order={4} style={{ flex: 1, minWidth: 0 }}>
-                                          {instance.name}
-                                        </Title>
-                                        {isAdmin && (
-                                          <Group gap={4}>
-                                            <ActionIcon
-                                              variant="subtle"
-                                              color="gray"
-                                              onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                openEditModal(instance);
-                                              }}
-                                              size="sm"
-                                              style={{
-                                                color: 'rgba(25, 25, 27, 0.7)',
-                                              }}
-                                            >
-                                              <IconEdit size={16} />
-                                            </ActionIcon>
-                                            <ActionIcon
-                                              variant="subtle"
-                                              color="red"
-                                              onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                handleDeleteClick(instance);
-                                              }}
-                                              size="sm"
-                                              style={{
-                                                color: 'rgba(220, 38, 38, 0.7)',
-                                              }}
-                                            >
-                                              <IconTrash size={16} />
-                                            </ActionIcon>
-                                          </Group>
-                                        )}
-                                      </Group>
-                                      {instance.client && (
-                                        <Group gap={8} align="center">
-                                          {clients[instance.client]?.logo && (() => {
-                                            const logoPath = clients[instance.client]!.logo!;
-                                            return (
-                                              <Image
-                                                src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
-                                                alt={instance.client}
-                                                width={16}
-                                                height={16}
-                                                style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                              />
-                                            );
-                                          })()}
-                                          <Text size="xs" c="dimmed">
-                                            {instance.client}
-                                          </Text>
-                                        </Group>
-                                      )}
-                                      {instance.description && (
-                                        <Text
-                                          size="sm"
-                                          c="dimmed"
-                                          lineClamp={2}
-                                          style={{
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 2,
-                                            WebkitBoxOrient: 'vertical',
-                                          }}
-                                        >
-                                          {instance.description}
-                                        </Text>
-                                      )}
-                                    </Stack>
-                                  </Box>
-                                </Stack>
-                              </Card>
-                            );
-                          }) : (
-                            <Grid>
-                              <Grid.Col span={12}>
-                                <Text c="dimmed" ta="center" py="xl">
-                                  No instances found. {instances.length > 0 && `Total instances loaded: ${instances.length}`}
-                                </Text>
-                              </Grid.Col>
-                            </Grid>
-                          )}
-                        </Box>
-                      </Accordion.Panel>
-                    </Accordion.Item>
-                  );
-                })}
-              </Accordion>
-              )
-            ) : (
-              <Grid>
-                <Grid.Col span={12}>
-                  <Text c="dimmed" ta="center" py="xl">
-                    No instances found. {instances.length > 0 && `Total instances loaded: ${instances.length}`}
-                  </Text>
-                </Grid.Col>
-              </Grid>
-            )}
-          </Stack>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="Apartment Chooser" pt="xl">
-          <Stack gap="md">
-            <Group gap="sm" align="flex-end" wrap="wrap">
-              <FilterDropdown
-                label="Filter by client"
-                data={clientOptions}
-                selectedValues={clientFilter}
-                onApply={setClientFilter}
-                onClear={() => setClientFilter([])}
-                searchPlaceholder="Search clients"
-              />
-              <FilterDropdown
-                label="Filter by project"
-                data={projectOptions}
-                selectedValues={projectFilter}
-                onApply={setProjectFilter}
-                onClear={() => setProjectFilter([])}
-                searchPlaceholder="Search projects"
-              />
-              <FilterDropdown
-                label="Filter by feature"
-                data={flattenedFeatures}
-                selectedValues={selectedFeature}
-                onApply={setSelectedFeature}
-                onClear={() => setSelectedFeature([])}
-                searchPlaceholder="Search features"
-              />
-              <FilterDropdown
-                label="Filter by status"
-                data={statusOptions}
-                selectedValues={statusFilter}
-                onApply={setStatusFilter}
-                onClear={() => setStatusFilter([])}
-                searchPlaceholder="Search status"
-              />
-              {userRole !== 'partner' && (
-                <FilterDropdown
-                  label="Filter by featured"
-                  data={featuredOptions}
-                  selectedValues={featuredFilter}
-                  onApply={setFeaturedFilter}
-                  onClear={() => setFeaturedFilter([])}
-                  searchPlaceholder="Search"
-                />
-              )}
-              <Select
-                placeholder="Group by..."
-                data={[
-                  { value: 'none', label: 'No grouping' },
-                  { value: 'client', label: 'Client' },
-                  { value: 'status', label: 'Status' },
-                  { value: 'feature', label: 'Feature' },
-                ]}
-                value={groupBy1}
-                onChange={(value) => {
-                  setGroupBy1((value as 'none' | 'client' | 'status' | 'feature') || 'none');
-                  if (value === groupBy2) setGroupBy2('none');
-                }}
-                variant="unstyled"
-                className="filter-text-link"
-                style={{ maxWidth: 160 }}
-                styles={filterDropdownStyles}
-              />
-              {groupBy1 !== 'none' && (
-                <Select
-                  placeholder="Then by..."
-                  data={[
-                    { value: 'none', label: 'None' },
-                    ...(groupBy1 !== 'client' ? [{ value: 'client', label: 'Client' }] : []),
-                    ...(groupBy1 !== 'status' ? [{ value: 'status', label: 'Status' }] : []),
-                    ...(groupBy1 !== 'feature' ? [{ value: 'feature', label: 'Feature' }] : []),
-                  ]}
-                  value={groupBy2}
-                  onChange={(value) =>
-                    setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
-                  }
-                  variant="unstyled"
-                  className="filter-text-link"
-                  style={{ maxWidth: 160 }}
-                  styles={filterDropdownStyles}
-                />
-              )}
-            </Group>
-            {/* Filter Tags Row */}
-            {(clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
-              <Group gap="xs" wrap="wrap">
-                {clientFilter.map((client) => (
-                  <FilterTag
-                    key={`client-${client}`}
-                    label="Client"
-                    value={client}
-                    onRemove={() => setClientFilter(clientFilter.filter(c => c !== client))}
-                  />
-                ))}
-                {projectFilter.map((project) => (
-                  <FilterTag
-                    key={`project-${project}`}
-                    label="Project"
-                    value={project}
-                    onRemove={() => setProjectFilter(projectFilter.filter(p => p !== project))}
-                  />
-                ))}
-                {selectedFeature.map((feature) => (
-                  <FilterTag
-                    key={`feature-${feature}`}
-                    label="Feature"
-                    value={feature}
-                    onRemove={() => setSelectedFeature(selectedFeature.filter(f => f !== feature))}
-                  />
-                ))}
-                {statusFilter.map((status) => {
-                  const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
-                  return (
-                    <FilterTag
-                      key={`status-${status}`}
-                      label="Status"
-                      value={statusLabel}
-                      onRemove={() => setStatusFilter(statusFilter.filter(s => s !== status))}
-                    />
-                  );
-                })}
-                {featuredFilter.map((featured) => {
-                  const featuredLabel = featuredOptions.find(opt => opt.value === featured)?.label || featured;
-                  return (
-                    <FilterTag
-                      key={`featured-${featured}`}
-                      label="Featured"
-                      value={featuredLabel}
-                      onRemove={() => setFeaturedFilter(featuredFilter.filter(f => f !== featured))}
-                    />
-                  );
-                })}
-              </Group>
-            )}
-            {Object.keys(groupedInstances).length > 0 ? (
-              Object.keys(groupedInstances).length === 1 ? (
-                // Single group: render without accordion
-                (() => {
-                  const [groupKey, groupInstances] = Object.entries(groupedInstances)[0];
-                  const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                  let displayKey = groupKey;
-                  let clientName: string | null = null;
-                  
-                  if (groupKey.includes(' | ')) {
-                    const parts = groupKey.split(' | ');
-                    if (groupBy1 === 'client' && parts[0]) {
-                      clientName = parts[0];
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    } else if (groupBy2 === 'client' && parts[1]) {
-                      clientName = parts[1];
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    } else {
-                      displayKey = `${parts[0]} → ${parts[1]}`;
-                    }
-                  } else {
-                    if (groupBy1 === 'client') {
-                      clientName = groupKey || null;
-                      displayKey = groupKey || 'No Client';
-                    } else {
-                      displayKey = groupKey || 'All Projects';
-                    }
-                  }
-                  
-                  const clientLogo = clientName && clients[clientName]?.logo;
-                  const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
-                  
-                  return (
-                    <Stack gap="md">
-                      <Group gap="sm" align="center">
-                        <Text fw={500} size="lg">
-                          {groupKey.includes(' | ') ? (
-                            <>
-                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                            </>
-                          ) : (
-                            displayKey
-                          )}
-                        </Text>
-                        {logoPath && (
-                          <Image
-                            src={logoPath}
-                            alt={clientName || ''}
-                            width={24}
-                            height={24}
-                            style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
-                          />
-                        )}
-                        <Badge size="sm" variant="light">{groupInstances.length}</Badge>
-                      </Group>
-                      <Box
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                          gap: '16px',
-                          width: '100%',
-                        }}
-                      >
-                        {groupInstances.map((instance, index) => (
-                          <Card
-                            key={instance.id} 
-                      shadow="sm"
-                      style={{ 
-                        width: '100%',
-                        maxWidth: '100%',
-                        cursor: 'pointer',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                        textDecoration: 'none',
-                        backgroundColor: '#E0E4EB',
-                      }} 
-                      padding={0} 
-                      radius="md" 
-                      h="100%"
-                      component="a"
-                      href={instance.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
-                        e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1) translateY(0)';
-                        e.currentTarget.style.boxShadow = 'var(--mantine-shadow-sm)';
-                      }}
-                    >
-                      <Stack gap="sm">
-                        <Box
-                          style={{ 
-                            width: '100%', 
-                            aspectRatio: '4 / 3', 
-                            overflow: 'hidden', 
-                            borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0', 
-                            position: 'relative'
-                          }}
-                        >
-                          <Image
-                            src={(instance.screenshot && instance.screenshot.trim()) ? (basePath && !instance.screenshot.startsWith(basePath) ? `${basePath}${instance.screenshot}` : instance.screenshot) : (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
-                            alt={instance.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', backgroundColor: 'var(--mantine-color-gray-1)' }}
-                            loading={index < 6 ? 'eager' : 'lazy'}
-                            decoding="async"
-                            fetchPriority={index < 3 ? 'high' : 'auto'}
-                            onError={(e) => {
-                              // Fallback to placeholder if screenshot fails to load
-                              const target = e.target as HTMLImageElement;
-                              const placeholderSrc = basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE;
-                              // Only retry once to avoid infinite loop
-                              if (!target.dataset.retried && target.src !== placeholderSrc) {
-                                target.dataset.retried = 'true';
-                                target.src = placeholderSrc;
-                              }
-                            }}
-                          />
-                          {userRole !== 'partner' && (
-                            <ActionIcon
-                              variant="filled"
-                              color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
-                              size="sm"
-                              style={{
-                                position: 'absolute',
-                                top: 8,
-                                right: 8,
-                                zIndex: 10,
-                                backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
-                              }}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                toggleFeatured(instance.id);
-                              }}
-                            >
-                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-                            </ActionIcon>
-                          )}
-                          {instance.features.length > 0 && (
-                            <Box
-                              style={{
-                                position: 'absolute',
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                background: 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%)',
-                                padding: '1rem',
-                              }}
-                            >
-                              <Group gap="xs">
-                                {instance.features.map((feature) => {
-                                  const featureColor = featureColors[feature];
-                                  const featureIcon = getFeatureIcon(feature);
-                                  const isDark = featureColor ? isColorDark(featureColor) : false;
-                                  let IconComponent = null;
-                                  if (featureIcon) {
-                                    try {
-                                      IconComponent = (TablerIcons as any)[featureIcon];
-                                    } catch (e) {
-                                      // Icon not found, silently continue
-                                    }
-                                  }
-                                  return (
-                                    <Badge 
-                                      key={feature} 
-                                      size="sm" 
-                                      variant="light" 
-                                      styles={{
-                                        root: {
-                                          backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                          color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
-                                        },
-                                      }}
-                                      leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
-                                    >
-                                      {feature}
-                                    </Badge>
-                                  );
-                                })}
-                              </Group>
-                            </Box>
-                          )}
-                        </Box>
-                        <Box px="lg" pb="lg">
-                          <Stack gap="sm">
-                            <Group gap={6} align="center" wrap="nowrap">
-                              <Badge
-                                size="sm"
-                                variant={instance.active === false ? 'light' : 'filled'}
-                                color={instance.active === false ? 'red' : 'green'}
-                                style={{
-                                  animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
-                                  flexShrink: 0,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {instance.active === false ? 'Inactive' : 'Active'}
-                              </Badge>
-                              <Title order={4} style={{ flex: 1, minWidth: 0 }}>
-                                {instance.name}
-                              </Title>
-                              {isAdmin && (
-                                <Group gap={4}>
-                                  <ActionIcon
-                                    variant="subtle"
-                                    color="gray"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      openEditModal(instance);
-                                    }}
-                                    size="sm"
-                                    style={{
-                                      color: 'rgba(25, 25, 27, 0.7)',
-                                    }}
-                                  >
-                                    <IconEdit size={16} />
-                                  </ActionIcon>
-                                  <ActionIcon
-                                    variant="subtle"
-                                    color="red"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      handleDeleteClick(instance);
-                                    }}
-                                    size="sm"
-                                    style={{
-                                      color: 'rgba(220, 38, 38, 0.7)',
-                                    }}
-                                  >
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                </Group>
-                              )}
-                            </Group>
-                            {instance.client && (
-                              <Group gap={8} align="center">
-                                {clients[instance.client]?.logo && (() => {
-                                  const logoPath = clients[instance.client]!.logo!;
-                                  return (
-                                    <Image
-                                      src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
-                                      alt={instance.client}
-                                      width={16}
-                                      height={16}
-                                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                    />
-                                  );
-                                })()}
-                                <Text size="xs" c="dimmed">
-                                  {instance.client}
-                                </Text>
-                              </Group>
-                            )}
-                            {instance.description && (
-                              <Text
-                                size="sm"
-                                c="dimmed"
-                                lineClamp={2}
-                                style={{
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  display: '-webkit-box',
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: 'vertical',
-                                }}
-                              >
-                                {instance.description}
-                              </Text>
-                            )}
-                          </Stack>
-                        </Box>
-                      </Stack>
-                    </Card>
-                        ))}
-                      </Box>
-                    </Stack>
-                  );
-                })()
-              ) : (
-                // Multiple groups: use accordion
-                <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
-                  {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
-                    const accordionValue = groupKey || `group-${index}`;
-                    return (
-                    <Accordion.Item key={accordionValue} value={accordionValue}>
-                      <Accordion.Control>
-                        <Group gap="sm" align="center">
-                          {(() => {
-                            const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                            let displayKey = groupKey;
-                            let clientName: string | null = null;
-                            
-                            if (groupKey.includes(' | ')) {
-                              const parts = groupKey.split(' | ');
-                              if (groupBy1 === 'client' && parts[0]) {
-                                clientName = parts[0];
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              } else if (groupBy2 === 'client' && parts[1]) {
-                                clientName = parts[1];
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              } else {
-                                displayKey = `${parts[0]} → ${parts[1]}`;
-                              }
-                            } else {
-                              if (groupBy1 === 'client') {
-                                clientName = groupKey || null;
-                                displayKey = groupKey || 'No Client';
-                              } else {
-                                displayKey = groupKey || 'All Projects';
-                              }
-                            }
-                            
-                            const clientLogo = clientName && clients[clientName]?.logo;
-                            const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
-                            
-                            return (
-                              <>
-                                <Text fw={500} size="lg">
-                                  {groupKey.includes(' | ') ? (
-                                    <>
-                                      {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                                    </>
-                                  ) : (
-                                    displayKey
-                                  )}
-                                </Text>
-                                {logoPath && (
-                                  <Image
-                                    src={logoPath}
-                                    alt={clientName || ''}
-                                    width={24}
-                                    height={24}
-                                    style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
-                                  />
-                                )}
-                              </>
-                            );
-                          })()}
-                          <Badge size="sm" variant="light">{groupInstances.length}</Badge>
-                        </Group>
-                      </Accordion.Control>
-                      <Accordion.Panel>
-                        <Box
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                            gap: '16px',
-                            width: '100%',
-                          }}
-                        >
-                          {groupInstances.map((instance, index) => (
-                            <Card
-                              key={instance.id}
-                              shadow="sm"
-                              style={{ 
-                                width: '100%',
-                                maxWidth: '100%',
-                                cursor: 'pointer',
-                                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                                textDecoration: 'none',
-                                backgroundColor: '#E0E4EB',
-                              }} 
-                              padding={0} 
-                              radius="md" 
-                              h="100%"
-                              component="a"
-                              href={instance.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
-                                e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1) translateY(0)';
-                                e.currentTarget.style.boxShadow = 'var(--mantine-shadow-sm)';
-                              }}
-                            >
-                              <Stack gap="sm">
-                                <Box
-                                  style={{ 
-                                    width: '100%', 
-                                    aspectRatio: '4 / 3', 
-                                    overflow: 'hidden', 
-                                    borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0', 
-                                    position: 'relative'
-                                  }}
-                                >
-                                  <Image
-                                    src={(instance.screenshot && instance.screenshot.trim()) ? (basePath && !instance.screenshot.startsWith(basePath) ? `${basePath}${instance.screenshot}` : instance.screenshot) : (basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE)}
-                                    alt={instance.name}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', backgroundColor: 'var(--mantine-color-gray-1)' }}
-                                    loading={index < 6 ? 'eager' : 'lazy'}
-                                    decoding="async"
-                                    fetchPriority={index < 3 ? 'high' : 'auto'}
-                                    onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
-                                      const placeholderSrc = basePath ? `${basePath}${PLACEHOLDER_IMAGE}` : PLACEHOLDER_IMAGE;
-                                      if (!target.dataset.retried && target.src !== placeholderSrc) {
-                                        target.dataset.retried = 'true';
-                                        target.src = placeholderSrc;
-                                      }
-                                    }}
-                                  />
-                                  {userRole !== 'partner' && (
-                                    <ActionIcon
-                                      variant="filled"
-                                      color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
-                                      size="sm"
-                                      style={{
-                                        position: 'absolute',
-                                        top: 8,
-                                        right: 8,
-                                        zIndex: 10,
-                                        backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
-                                      }}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        toggleFeatured(instance.id);
-                                      }}
-                                    >
-                                      {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-                                    </ActionIcon>
-                                  )}
-                                  {instance.features.length > 0 && (
-                                    <Box
-                                      style={{
-                                        position: 'absolute',
-                                        bottom: 0,
-                                        left: 0,
-                                        right: 0,
-                                        background: 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%)',
-                                        padding: '1rem',
-                                      }}
-                                    >
-                                      <Group gap="xs">
-                                        {instance.features.map((feature) => {
-                                          const featureColor = featureColors[feature];
-                                          const featureIcon = getFeatureIcon(feature);
-                                          const isDark = featureColor ? isColorDark(featureColor) : false;
-                                          let IconComponent = null;
-                                          if (featureIcon) {
-                                            try {
-                                              IconComponent = (TablerIcons as any)[featureIcon];
-                                            } catch (e) {
-                                            }
-                                          }
-                                          return (
-                                            <Badge 
-                                              key={feature} 
-                                              size="sm" 
-                                              variant="light" 
-                                              styles={{
-                                                root: {
-                                                  backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                                  color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
-                                                },
-                                              }}
-                                              leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
-                                            >
-                                              {feature}
-                                            </Badge>
-                                          );
-                                        })}
-                                      </Group>
-                                    </Box>
-                                  )}
-                                </Box>
-                                <Box px="lg" pb="lg">
-                                  <Stack gap="sm">
-                                    <Group gap={6} align="center" wrap="nowrap">
-                                      <Badge
-                                        size="sm"
-                                        variant={instance.active === false ? 'light' : 'filled'}
-                                        color={instance.active === false ? 'red' : 'green'}
-                                        style={{
-                                          animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
-                                          flexShrink: 0,
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {instance.active === false ? 'Inactive' : 'Active'}
-                                      </Badge>
-                                      <Title order={4} style={{ flex: 1, minWidth: 0 }}>
-                                        {instance.name}
-                                      </Title>
-                                      {isAdmin && (
-                                        <Group gap={4}>
-                                          <ActionIcon
-                                            variant="subtle"
-                                            color="gray"
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              openEditModal(instance);
-                                            }}
-                                            size="sm"
-                                            style={{
-                                              color: 'rgba(25, 25, 27, 0.7)',
-                                            }}
-                                          >
-                                            <IconEdit size={16} />
-                                          </ActionIcon>
-                                          <ActionIcon
-                                            variant="subtle"
-                                            color="red"
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              handleDeleteClick(instance);
-                                            }}
-                                            size="sm"
-                                            style={{
-                                              color: 'rgba(220, 38, 38, 0.7)',
-                                            }}
-                                          >
-                                            <IconTrash size={16} />
-                                          </ActionIcon>
-                                        </Group>
-                                      )}
-                                    </Group>
-                                    {instance.client && (
-                                      <Group gap={8} align="center">
-                                        {clients[instance.client]?.logo && (() => {
-                                          const logoPath = clients[instance.client]!.logo!;
-                                          return (
-                                            <Image
-                                              src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
-                                              alt={instance.client}
-                                              width={16}
-                                              height={16}
-                                              style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                            />
-                                          );
-                                        })()}
-                                        <Text size="xs" c="dimmed">
-                                          {instance.client}
-                                        </Text>
-                                      </Group>
-                                    )}
-                                    {instance.description && (
-                                      <Text
-                                        size="sm"
-                                        c="dimmed"
-                                        lineClamp={2}
-                                        style={{
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis',
-                                          display: '-webkit-box',
-                                          WebkitLineClamp: 2,
-                                          WebkitBoxOrient: 'vertical',
-                                        }}
-                                      >
-                                        {instance.description}
-                                      </Text>
-                                    )}
-                                  </Stack>
-                                </Box>
-                              </Stack>
-                            </Card>
-                          ))}
-                        </Box>
-                      </Accordion.Panel>
-                    </Accordion.Item>
-                    );
-                  })}
-                </Accordion>
-              )
-            ) : (
-              <Grid>
-                <Grid.Col span={12}>
-                  <Text c="dimmed" ta="center" py="xl">
-                    No instances found. {instances.length > 0 && `Total instances loaded: ${instances.length}`}
-                  </Text>
-                </Grid.Col>
-              </Grid>
-            )}
-          </Stack>
-        </Tabs.Panel>
-      </Tabs>
 
       <Modal
         opened={modalOpened}
