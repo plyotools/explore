@@ -1133,15 +1133,18 @@ export default function HomePage() {
                                 </Group>
                                 {instance.client && (
                                   <Group gap={8} align="center">
-                                    {clients[instance.client]?.logo && (
-                                      <Image
-                                        src={basePath && !clients[instance.client].logo.startsWith(basePath) ? `${basePath}${clients[instance.client].logo}` : clients[instance.client].logo}
-                                        alt={instance.client}
-                                        width={16}
-                                        height={16}
-                                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                      />
-                                    )}
+                                    {clients[instance.client]?.logo && (() => {
+                                      const logoPath = clients[instance.client]!.logo!;
+                                      return (
+                                        <Image
+                                          src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                          alt={instance.client}
+                                          width={16}
+                                          height={16}
+                                          style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                        />
+                                      );
+                                    })()}
                                     <Text size="xs" c="dimmed">
                                       {instance.client}
                                     </Text>
@@ -1428,15 +1431,18 @@ export default function HomePage() {
                                 </Group>
                                 {instance.client && (
                                   <Group gap={8} align="center">
-                                    {clients[instance.client]?.logo && (
-                                      <Image
-                                        src={basePath && !clients[instance.client].logo.startsWith(basePath) ? `${basePath}${clients[instance.client].logo}` : clients[instance.client].logo}
-                                        alt={instance.client}
-                                        width={16}
-                                        height={16}
-                                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                      />
-                                    )}
+                                    {clients[instance.client]?.logo && (() => {
+                                      const logoPath = clients[instance.client]!.logo!;
+                                      return (
+                                        <Image
+                                          src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                          alt={instance.client}
+                                          width={16}
+                                          height={16}
+                                          style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                        />
+                                      );
+                                    })()}
                                     <Text size="xs" c="dimmed">
                                       {instance.client}
                                     </Text>
@@ -1723,15 +1729,18 @@ export default function HomePage() {
                                 </Group>
                                 {instance.client && (
                                   <Group gap={8} align="center">
-                                    {clients[instance.client]?.logo && (
-                                      <Image
-                                        src={basePath && !clients[instance.client].logo.startsWith(basePath) ? `${basePath}${clients[instance.client].logo}` : clients[instance.client].logo}
-                                        alt={instance.client}
-                                        width={16}
-                                        height={16}
-                                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                      />
-                                    )}
+                                    {clients[instance.client]?.logo && (() => {
+                                      const logoPath = clients[instance.client]!.logo!;
+                                      return (
+                                        <Image
+                                          src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                          alt={instance.client}
+                                          width={16}
+                                          height={16}
+                                          style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                        />
+                                      );
+                                    })()}
                                     <Text size="xs" c="dimmed">
                                       {instance.client}
                                     </Text>
