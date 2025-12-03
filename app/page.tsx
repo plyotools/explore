@@ -788,9 +788,6 @@ export default function HomePage() {
 
   // Removed excessive logging - only log on actual changes
 
-  // Calculate basePath for images (screenshots, logos, etc.)
-  const basePath = typeof window !== 'undefined' && window.location.pathname.startsWith('/explore') ? '/explore' : '';
-
   return (
     <Container size="fluid" py="xl" px="md">
       <Box pos="relative" mb="xl">
