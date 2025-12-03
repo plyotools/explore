@@ -25,6 +25,7 @@ import {
   Alert,
   Popover,
   ScrollArea,
+  Accordion,
 } from '@mantine/core';
 
 // Add pulsating animation
@@ -40,7 +41,7 @@ const pulseKeyframes = `
     }
   }
 `;
-import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled } from '@tabler/icons-react';
+import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash } from '@tabler/icons-react';
 import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './lib/types';
 
 // Icon Picker Component
@@ -109,9 +110,11 @@ export default function HomePage() {
   const [instances, setInstances] = useState<ExploreInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<InstanceType | 'All'>('All');
-  const [selectedFeature, setSelectedFeature] = useState<string | null>(null);
+  const [selectedFeature, setSelectedFeature] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [clientFilter, setClientFilter] = useState<string | null>(null);
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [filterKeys, setFilterKeys] = useState({ client: 0, project: 0, feature: 0 });
   const [featuredFilter, setFeaturedFilter] = useState<'all' | 'featured'>('all');
   const [featuredInstances, setFeaturedInstances] = useState<Set<string>>(new Set());
   const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
@@ -133,6 +136,8 @@ export default function HomePage() {
   const [formDescription, setFormDescription] = useState<string>('');
   const [formActive, setFormActive] = useState<boolean>(true);
   const [modalOpened, setModalOpened] = useState(false);
+  const [deleteModalOpened, setDeleteModalOpened] = useState(false);
+  const [instanceToDelete, setInstanceToDelete] = useState<ExploreInstance | null>(null);
   const [features, setFeatures] = useState<FeatureConfig>({
     'Virtual Showroom': [],
     'Apartment Chooser': [],
@@ -156,6 +161,41 @@ export default function HomePage() {
   const [editingClientWebsite, setEditingClientWebsite] = useState<string>('');
   const [editingClientLogo, setEditingClientLogo] = useState<string>('');
   const [fetchingFavicon, setFetchingFavicon] = useState<string | null>(null);
+  const [mergeModalOpened, setMergeModalOpened] = useState(false);
+  const [clientToRemove, setClientToRemove] = useState<string | null>(null);
+  const [mergeTargetClient, setMergeTargetClient] = useState<string | null>(null);
+
+  // Shared styles for filter dropdowns (text-link style)
+  const filterDropdownStyles = {
+    root: {
+      display: 'inline-block',
+    },
+    input: {
+      padding: '4px 8px',
+      border: 'none',
+      backgroundColor: 'transparent',
+      cursor: 'pointer',
+      fontSize: '14px',
+      color: '#F0F2F9',
+      minHeight: 'auto',
+      height: 'auto',
+    },
+    rightSection: {
+      color: '#F0F2F9',
+      pointerEvents: 'none' as const,
+    },
+    dropdown: {
+      backgroundColor: 'var(--mantine-color-dark-7)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+    },
+    option: {
+      color: '#F0F2F9',
+    },
+    placeholder: {
+      color: '#F0F2F9',
+      opacity: 1,
+    },
+  };
 
   // Helper function to get icon for a feature name - memoized with useCallback
   const getFeatureIcon = useCallback((featureName: string): string | undefined => {
@@ -406,6 +446,58 @@ export default function HomePage() {
     }
   };
 
+  const mergeClient = async (clientToRemove: string, mergeTargetClient: string | null) => {
+    if (!clientToRemove) return;
+    
+    // If no merge target, just remove the client (set instances to no client)
+    const targetClient = mergeTargetClient || null;
+    
+    try {
+      // Get all instances that use this client
+      const instancesToUpdate = instances.filter(i => i.client === clientToRemove);
+      
+      // Update each instance
+      for (const instance of instancesToUpdate) {
+        const response = await fetch('/api/instances', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: instance.id,
+            client: targetClient,
+          }),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to update instance');
+        }
+      }
+      
+      // Remove the client from the clients list
+      const newClients = { ...editingClients };
+      delete newClients[clientToRemove];
+      
+      // Save the updated clients
+      await saveClients(newClients);
+      
+      // Update editingClients to reflect the removal
+      setEditingClients(newClients);
+      
+      // Reload instances to reflect changes
+      await loadInstances();
+      
+      // Close modal and reset state
+      setMergeModalOpened(false);
+      setClientToRemove(null);
+      setMergeTargetClient(null);
+      
+      alert(`Successfully ${targetClient ? `merged "${clientToRemove}" into "${targetClient}"` : `removed "${clientToRemove}"`}. ${instancesToUpdate.length} instance(s) updated.`);
+    } catch (error) {
+      console.error('Failed to merge client:', error);
+      alert(`Failed to merge client: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   // Removed periodic refresh - only refresh on user actions for better performance
 
   const checkAuth = async () => {
@@ -609,18 +701,30 @@ export default function HomePage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this instance?')) return;
+  const handleDeleteClick = (instance: ExploreInstance) => {
+    setInstanceToDelete(instance);
+    setDeleteModalOpened(true);
+  };
+
+  const handleDelete = async () => {
+    if (!instanceToDelete) return;
 
     try {
-      const response = await fetch(`/api/instances?id=${id}`, {
+      const response = await fetch(`/api/instances?id=${instanceToDelete.id}`, {
         method: 'DELETE',
       });
       if (response.ok) {
         await loadInstances();
+        setDeleteModalOpened(false);
+        setInstanceToDelete(null);
+        alert(`Successfully deleted "${instanceToDelete.name}"`);
+      } else {
+        const error = await response.json();
+        alert(`Failed to delete instance: ${error.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Failed to delete instance:', error);
+      alert(`Failed to delete instance: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -707,14 +811,15 @@ export default function HomePage() {
       if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
       
       if (activeTab !== 'All' && instance.type !== activeTab) return false;
-      if (selectedFeature && !instance.features.includes(selectedFeature)) return false;
+      if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
       if (statusFilter === 'active' && instance.active === false) return false;
       if (statusFilter === 'inactive' && instance.active !== false) return false;
-      if (clientFilter && (instance.client || '').trim() !== clientFilter) return false;
+      if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
+      if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
       if (featuredFilter === 'featured' && !featuredInstances.has(instance.id)) return false;
       return true;
     });
-  }, [instances, activeTab, selectedFeature, statusFilter, clientFilter, featuredFilter, featuredInstances, userRole]);
+  }, [instances, activeTab, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
 
   const clientOptions = useMemo(() => {
     const clients = Array.from(
@@ -727,25 +832,38 @@ export default function HomePage() {
     return clients.map((c) => ({ value: c, label: c }));
   }, [instances]);
 
+  const projectOptions = useMemo(() => {
+    const uniqueProjects = Array.from(
+      new Set(instances.map((i) => i.name))
+    ).sort((a, b) => a.localeCompare(b));
+    return uniqueProjects.map((name) => ({ value: name, label: name }));
+  }, [instances]);
+
   const allFeatures = Array.from(
     new Set(instances.flatMap((i) => i.features))
   ).sort();
 
   const groupedFeatures = useMemo(() => {
+    const processFeatures = (type: InstanceType) => {
+      const featureSet = new Set<string>();
+      features[type]
+        .map(f => typeof f === 'string' ? f : f.name)
+        .filter(f => instances.some(i => i.type === type && i.features.includes(f)))
+        .forEach(f => featureSet.add(f));
+      
+      return Array.from(featureSet)
+        .sort((a, b) => a.localeCompare(b))
+        .map(f => ({ value: f, label: f }));
+    };
+
     return [
       {
         group: 'Virtual Showroom',
-        items: features['Virtual Showroom']
-          .map(f => typeof f === 'string' ? f : f.name)
-          .filter(f => instances.some(i => i.type === 'Virtual Showroom' && i.features.includes(f)))
-          .map(f => ({ value: f, label: f })),
+        items: processFeatures('Virtual Showroom'),
       },
       {
         group: 'Apartment Chooser',
-        items: features['Apartment Chooser']
-          .map(f => typeof f === 'string' ? f : f.name)
-          .filter(f => instances.some(i => i.type === 'Apartment Chooser' && i.features.includes(f)))
-          .map(f => ({ value: f, label: f })),
+        items: processFeatures('Apartment Chooser'),
       },
     ].filter(group => group.items.length > 0);
   }, [features, instances]);
@@ -762,8 +880,8 @@ export default function HomePage() {
       return instance.active === false ? 'Inactive' : 'Active';
     }
     if (groupBy === 'feature') {
-      // Group by first feature, or "(No Features)" if none
-      return instance.features.length > 0 ? instance.features[0] : '(No Features)';
+      // Group by first feature, or "All" if none
+      return instance.features.length > 0 ? instance.features[0] : 'All';
     }
     return '';
   };
@@ -937,7 +1055,7 @@ export default function HomePage() {
         value={activeTab}
         onChange={(value) => {
           setActiveTab(value as InstanceType | 'All');
-          setSelectedFeature(null);
+          setSelectedFeature([]);
         }}
         mb="xl"
       >
@@ -956,36 +1074,97 @@ export default function HomePage() {
         <Tabs.Panel value="All" pt="xl">
           <Stack gap="md">
             <Group gap="sm" align="flex-end" wrap="wrap">
-              <Select
-                placeholder="Filter by client"
-                data={clientOptions}
-                value={clientFilter}
-                onChange={setClientFilter}
-                clearable
-                style={{ maxWidth: 220 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
-              <Select
-                placeholder="Filter by feature"
-                data={groupedFeatures}
-                value={selectedFeature}
-                onChange={setSelectedFeature}
-                clearable
-                style={{ maxWidth: 260 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`client-${filterKeys.client}`}
+                  placeholder="Filter by client"
+                  data={clientOptions}
+                  value={clientFilter}
+                  onChange={(value) => setClientFilter(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 220 }}
+                  styles={filterDropdownStyles}
+                />
+                {clientFilter.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setClientFilter([]);
+                      setFilterKeys(prev => ({ ...prev, client: prev.client + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`project-${filterKeys.project}`}
+                  placeholder="Filter by project"
+                  data={projectOptions}
+                  value={projectFilter}
+                  onChange={(value) => setProjectFilter(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 220 }}
+                  styles={filterDropdownStyles}
+                />
+                {projectFilter.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setProjectFilter([]);
+                      setFilterKeys(prev => ({ ...prev, project: prev.project + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`feature-${filterKeys.feature}`}
+                  placeholder="Filter by feature"
+                  data={groupedFeatures}
+                  value={selectedFeature}
+                  onChange={(value) => setSelectedFeature(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 260 }}
+                  styles={filterDropdownStyles}
+                />
+                {selectedFeature.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setSelectedFeature([]);
+                      setFilterKeys(prev => ({ ...prev, feature: prev.feature + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
               <Select
                 placeholder="All statuses"
                 data={[
-                  { value: 'all', label: 'All' },
+                  { value: 'all', label: 'Any status' },
                   { value: 'active', label: 'Active' },
                   { value: 'inactive', label: 'Inactive' },
                 ]}
@@ -993,30 +1172,26 @@ export default function HomePage() {
                 onChange={(value) =>
                   setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
                 }
+                variant="unstyled"
+                className="filter-text-link"
                 style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
+                styles={filterDropdownStyles}
               />
               {userRole !== 'partner' && (
                 <Select
-                  placeholder="Featured"
+                  placeholder="Featured or not"
                   data={[
-                    { value: 'all', label: 'All' },
+                    { value: 'all', label: 'Featured or not' },
                     { value: 'featured', label: 'Featured' },
                   ]}
                   value={featuredFilter}
                   onChange={(value) => {
                     setFeaturedFilter((value as 'all' | 'featured') || 'all');
                   }}
+                  variant="unstyled"
+                  className="filter-text-link"
                   style={{ maxWidth: 160 }}
-                  styles={{
-                    input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                  }}
+                  styles={filterDropdownStyles}
                 />
               )}
               <Select
@@ -1032,12 +1207,10 @@ export default function HomePage() {
                   setGroupBy1((value as 'none' | 'client' | 'status' | 'feature') || 'none');
                   if (value === groupBy2) setGroupBy2('none');
                 }}
+                variant="unstyled"
+                className="filter-text-link"
                 style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
+                styles={filterDropdownStyles}
               />
               {groupBy1 !== 'none' && (
                 <Select
@@ -1052,45 +1225,56 @@ export default function HomePage() {
                   onChange={(value) =>
                     setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
                   }
+                  variant="unstyled"
+                  className="filter-text-link"
                   style={{ maxWidth: 160 }}
-                  styles={{
-                    input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                  }}
+                  styles={filterDropdownStyles}
                 />
               )}
             </Group>
             {Object.keys(groupedInstances).length > 0 ? (
-              Object.entries(groupedInstances).map(([groupKey, groupInstances]) => (
-                <Box key={groupKey}>
-                  {groupKey && (
-                    <Title order={3} mb="md" mt={groupKey === Object.keys(groupedInstances)[0] ? 0 : 'xl'}>
-                      {groupKey.includes(' | ') ? (
-                        <>
-                          {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                        </>
-                      ) : (
-                        groupKey
-                      )}
-                      <Badge ml="sm" size="sm" variant="light">{groupInstances.length}</Badge>
-                    </Title>
-                  )}
-                  <Grid gutter="md">
+              <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
+                {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
+                  const accordionValue = groupKey || `group-${index}`;
+                  return (
+                  <Accordion.Item key={accordionValue} value={accordionValue}>
+                    <Accordion.Control>
+                      <Group gap="sm" align="center">
+                        <Text fw={500} size="lg">
+                          {groupKey.includes(' | ') ? (
+                            <>
+                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                            </>
+                          ) : (
+                            groupKey || 'All Projects'
+                          )}
+                        </Text>
+                        <Badge size="sm" variant="light">{groupInstances.length}</Badge>
+                      </Group>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Box
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                          gap: '16px',
+                          width: '100%',
+                        }}
+                      >
                     {groupInstances.map((instance, index) => (
-                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
-                        <Card 
+                      <Card
+                        key={instance.id} 
                       shadow="sm"
                       style={{ 
-                        maxWidth: 480, 
                         width: '100%',
+                        maxWidth: '100%',
                         cursor: 'pointer',
                         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         textDecoration: 'none',
+                        backgroundColor: '#E0E4EB',
                       }} 
                       padding={0} 
                       radius="md" 
-                      withBorder 
                       h="100%"
                       component="a"
                       href={instance.link}
@@ -1201,59 +1385,76 @@ export default function HomePage() {
                         </Box>
                         <Box px="lg" pb="lg">
                           <Stack gap="sm">
-                            <Group justify="space-between" align="center">
-                              <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                                <Group gap={6} align="center" wrap="nowrap">
-                                  <Title order={4} style={{ flex: 1, minWidth: 0 }}>
-                                    {instance.name}
-                                  </Title>
-                                  <Badge
+                            <Group gap={6} align="center" wrap="nowrap">
+                              <Badge
+                                size="sm"
+                                variant={instance.active === false ? 'light' : 'filled'}
+                                color={instance.active === false ? 'red' : 'green'}
+                                style={{
+                                  animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
+                                  flexShrink: 0,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {instance.active === false ? 'Inactive' : 'Active'}
+                              </Badge>
+                              <Title order={4} style={{ flex: 1, minWidth: 0 }}>
+                                {instance.name}
+                              </Title>
+                              {isAdmin && (
+                                <Group gap={4}>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      openEditModal(instance);
+                                    }}
                                     size="sm"
-                                    variant="light"
-                                    color={instance.active === false ? 'gray' : 'green'}
                                     style={{
-                                      animation: 'pulse 2s ease-in-out infinite',
-                                      flexShrink: 0,
+                                      color: 'rgba(25, 25, 27, 0.7)',
                                     }}
                                   >
-                                    {instance.active === false ? 'Inactive' : 'Active'}
-                                  </Badge>
+                                    <IconEdit size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="red"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleDeleteClick(instance);
+                                    }}
+                                    size="sm"
+                                    style={{
+                                      color: 'rgba(220, 38, 38, 0.7)',
+                                    }}
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
                                 </Group>
-                                {instance.client && (
-                                  <Group gap={8} align="center">
-                                    {clients[instance.client]?.logo && (() => {
-                                      const logoPath = clients[instance.client]!.logo!;
-                                      return (
-                                        <Image
-                                          src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
-                                          alt={instance.client}
-                                          width={16}
-                                          height={16}
-                                          style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                        />
-                                      );
-                                    })()}
-                                    <Text size="xs" c="dimmed">
-                                      {instance.client}
-                                    </Text>
-                                  </Group>
-                                )}
-                              </Stack>
-                              {isAdmin && (
-                                <ActionIcon
-                                  variant="subtle"
-                                  color="purple"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openEditModal(instance);
-                                  }}
-                                  size="sm"
-                                >
-                                  <IconEdit size={16} />
-                                </ActionIcon>
                               )}
                             </Group>
+                            {instance.client && (
+                              <Group gap={8} align="center">
+                                {clients[instance.client]?.logo && (() => {
+                                  const logoPath = clients[instance.client]!.logo!;
+                                  return (
+                                    <Image
+                                      src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                      alt={instance.client}
+                                      width={16}
+                                      height={16}
+                                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                    />
+                                  );
+                                })()}
+                                <Text size="xs" c="dimmed">
+                                  {instance.client}
+                                </Text>
+                              </Group>
+                            )}
                             {instance.description && (
                               <Text
                                 size="sm"
@@ -1274,11 +1475,13 @@ export default function HomePage() {
                         </Box>
                       </Stack>
                         </Card>
-                      </Grid.Col>
                     ))}
-                  </Grid>
-                </Box>
-              ))
+                      </Box>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                  );
+                })}
+              </Accordion>
             ) : (
               <Grid>
                 <Grid.Col span={12}>
@@ -1294,36 +1497,97 @@ export default function HomePage() {
         <Tabs.Panel value="Apartment Chooser" pt="xl">
           <Stack gap="md">
             <Group gap="sm" align="flex-end" wrap="wrap">
-              <Select
-                placeholder="Filter by client"
-                data={clientOptions}
-                value={clientFilter}
-                onChange={setClientFilter}
-                clearable
-                style={{ maxWidth: 220 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
-              <Select
-                placeholder="Filter by feature"
-                data={groupedFeatures}
-                value={selectedFeature}
-                onChange={setSelectedFeature}
-                clearable
-                style={{ maxWidth: 260 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`client-${filterKeys.client}`}
+                  placeholder="Filter by client"
+                  data={clientOptions}
+                  value={clientFilter}
+                  onChange={(value) => setClientFilter(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 220 }}
+                  styles={filterDropdownStyles}
+                />
+                {clientFilter.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setClientFilter([]);
+                      setFilterKeys(prev => ({ ...prev, client: prev.client + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`project-${filterKeys.project}`}
+                  placeholder="Filter by project"
+                  data={projectOptions}
+                  value={projectFilter}
+                  onChange={(value) => setProjectFilter(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 220 }}
+                  styles={filterDropdownStyles}
+                />
+                {projectFilter.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setProjectFilter([]);
+                      setFilterKeys(prev => ({ ...prev, project: prev.project + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`feature-${filterKeys.feature}`}
+                  placeholder="Filter by feature"
+                  data={groupedFeatures}
+                  value={selectedFeature}
+                  onChange={(value) => setSelectedFeature(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 260 }}
+                  styles={filterDropdownStyles}
+                />
+                {selectedFeature.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setSelectedFeature([]);
+                      setFilterKeys(prev => ({ ...prev, feature: prev.feature + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
               <Select
                 placeholder="All statuses"
                 data={[
-                  { value: 'all', label: 'All' },
+                  { value: 'all', label: 'Any status' },
                   { value: 'active', label: 'Active' },
                   { value: 'inactive', label: 'Inactive' },
                 ]}
@@ -1331,30 +1595,26 @@ export default function HomePage() {
                 onChange={(value) =>
                   setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
                 }
+                variant="unstyled"
+                className="filter-text-link"
                 style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
+                styles={filterDropdownStyles}
               />
               {userRole !== 'partner' && (
                 <Select
-                  placeholder="Featured"
+                  placeholder="Featured or not"
                   data={[
-                    { value: 'all', label: 'All' },
+                    { value: 'all', label: 'Featured or not' },
                     { value: 'featured', label: 'Featured' },
                   ]}
                   value={featuredFilter}
                   onChange={(value) => {
                     setFeaturedFilter((value as 'all' | 'featured') || 'all');
                   }}
+                  variant="unstyled"
+                  className="filter-text-link"
                   style={{ maxWidth: 160 }}
-                  styles={{
-                    input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                  }}
+                  styles={filterDropdownStyles}
                 />
               )}
               <Select
@@ -1370,12 +1630,10 @@ export default function HomePage() {
                   setGroupBy1((value as 'none' | 'client' | 'status' | 'feature') || 'none');
                   if (value === groupBy2) setGroupBy2('none');
                 }}
+                variant="unstyled"
+                className="filter-text-link"
                 style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
+                styles={filterDropdownStyles}
               />
               {groupBy1 !== 'none' && (
                 <Select
@@ -1390,45 +1648,56 @@ export default function HomePage() {
                   onChange={(value) =>
                     setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
                   }
+                  variant="unstyled"
+                  className="filter-text-link"
                   style={{ maxWidth: 160 }}
-                  styles={{
-                    input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                  }}
+                  styles={filterDropdownStyles}
                 />
               )}
             </Group>
             {Object.keys(groupedInstances).length > 0 ? (
-              Object.entries(groupedInstances).map(([groupKey, groupInstances]) => (
-                <Box key={groupKey}>
-                  {groupKey && (
-                    <Title order={3} mb="md" mt={groupKey === Object.keys(groupedInstances)[0] ? 0 : 'xl'}>
-                      {groupKey.includes(' | ') ? (
-                        <>
-                          {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                        </>
-                      ) : (
-                        groupKey
-                      )}
-                      <Badge ml="sm" size="sm" variant="light">{groupInstances.length}</Badge>
-                    </Title>
-                  )}
-                  <Grid gutter="md">
+              <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
+                {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
+                  const accordionValue = groupKey || `group-${index}`;
+                  return (
+                  <Accordion.Item key={accordionValue} value={accordionValue}>
+                    <Accordion.Control>
+                      <Group gap="sm" align="center">
+                        <Text fw={500} size="lg">
+                          {groupKey.includes(' | ') ? (
+                            <>
+                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                            </>
+                          ) : (
+                            groupKey || 'All Projects'
+                          )}
+                        </Text>
+                        <Badge size="sm" variant="light">{groupInstances.length}</Badge>
+                      </Group>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Box
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                          gap: '16px',
+                          width: '100%',
+                        }}
+                      >
                     {groupInstances.map((instance, index) => (
-                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
-                        <Card 
+                      <Card
+                        key={instance.id} 
                       shadow="sm"
                       style={{ 
-                        maxWidth: 480, 
                         width: '100%',
+                        maxWidth: '100%',
                         cursor: 'pointer',
                         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         textDecoration: 'none',
+                        backgroundColor: '#E0E4EB',
                       }} 
                       padding={0} 
                       radius="md" 
-                      withBorder 
                       h="100%"
                       component="a"
                       href={instance.link}
@@ -1539,59 +1808,76 @@ export default function HomePage() {
                         </Box>
                         <Box px="lg" pb="lg">
                           <Stack gap="sm">
-                            <Group justify="space-between" align="center">
-                              <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                                <Group gap={6} align="center" wrap="nowrap">
-                                  <Title order={4} style={{ flex: 1, minWidth: 0 }}>
-                                    {instance.name}
-                                  </Title>
-                                  <Badge
+                            <Group gap={6} align="center" wrap="nowrap">
+                              <Badge
+                                size="sm"
+                                variant={instance.active === false ? 'light' : 'filled'}
+                                color={instance.active === false ? 'red' : 'green'}
+                                style={{
+                                  animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
+                                  flexShrink: 0,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {instance.active === false ? 'Inactive' : 'Active'}
+                              </Badge>
+                              <Title order={4} style={{ flex: 1, minWidth: 0 }}>
+                                {instance.name}
+                              </Title>
+                              {isAdmin && (
+                                <Group gap={4}>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      openEditModal(instance);
+                                    }}
                                     size="sm"
-                                    variant="light"
-                                    color={instance.active === false ? 'gray' : 'green'}
                                     style={{
-                                      animation: 'pulse 2s ease-in-out infinite',
-                                      flexShrink: 0,
+                                      color: 'rgba(25, 25, 27, 0.7)',
                                     }}
                                   >
-                                    {instance.active === false ? 'Inactive' : 'Active'}
-                                  </Badge>
+                                    <IconEdit size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="red"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleDeleteClick(instance);
+                                    }}
+                                    size="sm"
+                                    style={{
+                                      color: 'rgba(220, 38, 38, 0.7)',
+                                    }}
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
                                 </Group>
-                                {instance.client && (
-                                  <Group gap={8} align="center">
-                                    {clients[instance.client]?.logo && (() => {
-                                      const logoPath = clients[instance.client]!.logo!;
-                                      return (
-                                        <Image
-                                          src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
-                                          alt={instance.client}
-                                          width={16}
-                                          height={16}
-                                          style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                        />
-                                      );
-                                    })()}
-                                    <Text size="xs" c="dimmed">
-                                      {instance.client}
-                                    </Text>
-                                  </Group>
-                                )}
-                              </Stack>
-                              {isAdmin && (
-                                <ActionIcon
-                                  variant="subtle"
-                                  color="purple"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openEditModal(instance);
-                                  }}
-                                  size="sm"
-                                >
-                                  <IconEdit size={16} />
-                                </ActionIcon>
                               )}
                             </Group>
+                            {instance.client && (
+                              <Group gap={8} align="center">
+                                {clients[instance.client]?.logo && (() => {
+                                  const logoPath = clients[instance.client]!.logo!;
+                                  return (
+                                    <Image
+                                      src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                      alt={instance.client}
+                                      width={16}
+                                      height={16}
+                                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                    />
+                                  );
+                                })()}
+                                <Text size="xs" c="dimmed">
+                                  {instance.client}
+                                </Text>
+                              </Group>
+                            )}
                             {instance.description && (
                               <Text
                                 size="sm"
@@ -1612,11 +1898,13 @@ export default function HomePage() {
                         </Box>
                       </Stack>
                     </Card>
-                  </Grid.Col>
                     ))}
-                  </Grid>
-                </Box>
-              ))
+                      </Box>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                  );
+                })}
+              </Accordion>
             ) : (
               <Grid>
                 <Grid.Col span={12}>
@@ -1632,36 +1920,97 @@ export default function HomePage() {
         <Tabs.Panel value="Virtual Showroom" pt="xl">
           <Stack gap="md">
             <Group gap="sm" align="flex-end" wrap="wrap">
-              <Select
-                placeholder="Filter by client"
-                data={clientOptions}
-                value={clientFilter}
-                onChange={setClientFilter}
-                clearable
-                style={{ maxWidth: 220 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
-              <Select
-                placeholder="Filter by feature"
-                data={groupedFeatures}
-                value={selectedFeature}
-                onChange={setSelectedFeature}
-                clearable
-                style={{ maxWidth: 260 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
-              />
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`client-${filterKeys.client}`}
+                  placeholder="Filter by client"
+                  data={clientOptions}
+                  value={clientFilter}
+                  onChange={(value) => setClientFilter(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 220 }}
+                  styles={filterDropdownStyles}
+                />
+                {clientFilter.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setClientFilter([]);
+                      setFilterKeys(prev => ({ ...prev, client: prev.client + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`project-${filterKeys.project}`}
+                  placeholder="Filter by project"
+                  data={projectOptions}
+                  value={projectFilter}
+                  onChange={(value) => setProjectFilter(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 220 }}
+                  styles={filterDropdownStyles}
+                />
+                {projectFilter.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setProjectFilter([]);
+                      setFilterKeys(prev => ({ ...prev, project: prev.project + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
+              <Group gap={4} align="flex-end">
+                <Select
+                  key={`feature-${filterKeys.feature}`}
+                  placeholder="Filter by feature"
+                  data={groupedFeatures}
+                  value={selectedFeature}
+                  onChange={(value) => setSelectedFeature(value as string[])}
+                  clearable
+                  searchable
+                  multiple
+                  variant="unstyled"
+                  className="filter-text-link"
+                  style={{ maxWidth: 260 }}
+                  styles={filterDropdownStyles}
+                />
+                {selectedFeature.length > 0 && (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setSelectedFeature([]);
+                      setFilterKeys(prev => ({ ...prev, feature: prev.feature + 1 }));
+                    }}
+                    style={{ color: '#F0F2F9' }}
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                )}
+              </Group>
               <Select
                 placeholder="All statuses"
                 data={[
-                  { value: 'all', label: 'All' },
+                  { value: 'all', label: 'Any status' },
                   { value: 'active', label: 'Active' },
                   { value: 'inactive', label: 'Inactive' },
                 ]}
@@ -1669,30 +2018,26 @@ export default function HomePage() {
                 onChange={(value) =>
                   setStatusFilter((value as 'all' | 'active' | 'inactive') || 'all')
                 }
+                variant="unstyled"
+                className="filter-text-link"
                 style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
+                styles={filterDropdownStyles}
               />
               {userRole !== 'partner' && (
                 <Select
-                  placeholder="Featured"
+                  placeholder="Featured or not"
                   data={[
-                    { value: 'all', label: 'All' },
+                    { value: 'all', label: 'Featured or not' },
                     { value: 'featured', label: 'Featured' },
                   ]}
                   value={featuredFilter}
                   onChange={(value) => {
                     setFeaturedFilter((value as 'all' | 'featured') || 'all');
                   }}
+                  variant="unstyled"
+                  className="filter-text-link"
                   style={{ maxWidth: 160 }}
-                  styles={{
-                    input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                  }}
+                  styles={filterDropdownStyles}
                 />
               )}
               <Select
@@ -1708,12 +2053,10 @@ export default function HomePage() {
                   setGroupBy1((value as 'none' | 'client' | 'status' | 'feature') || 'none');
                   if (value === groupBy2) setGroupBy2('none');
                 }}
+                variant="unstyled"
+                className="filter-text-link"
                 style={{ maxWidth: 160 }}
-                styles={{
-                  input: {
-                    color: 'var(--mantine-color-text) !important',
-                  },
-                }}
+                styles={filterDropdownStyles}
               />
               {groupBy1 !== 'none' && (
                 <Select
@@ -1728,45 +2071,56 @@ export default function HomePage() {
                   onChange={(value) =>
                     setGroupBy2((value as 'none' | 'client' | 'status' | 'feature') || 'none')
                   }
+                  variant="unstyled"
+                  className="filter-text-link"
                   style={{ maxWidth: 160 }}
-                  styles={{
-                    input: {
-                      color: 'var(--mantine-color-text) !important',
-                    },
-                  }}
+                  styles={filterDropdownStyles}
                 />
               )}
             </Group>
             {Object.keys(groupedInstances).length > 0 ? (
-              Object.entries(groupedInstances).map(([groupKey, groupInstances]) => (
-                <Box key={groupKey}>
-                  {groupKey && (
-                    <Title order={3} mb="md" mt={groupKey === Object.keys(groupedInstances)[0] ? 0 : 'xl'}>
-                      {groupKey.includes(' | ') ? (
-                        <>
-                          {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
-                        </>
-                      ) : (
-                        groupKey
-                      )}
-                      <Badge ml="sm" size="sm" variant="light">{groupInstances.length}</Badge>
-                    </Title>
-                  )}
-                  <Grid gutter="md">
+              <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
+                {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
+                  const accordionValue = groupKey || `group-${index}`;
+                  return (
+                  <Accordion.Item key={accordionValue} value={accordionValue}>
+                    <Accordion.Control>
+                      <Group gap="sm" align="center">
+                        <Text fw={500} size="lg">
+                          {groupKey.includes(' | ') ? (
+                            <>
+                              {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                            </>
+                          ) : (
+                            groupKey || 'All Projects'
+                          )}
+                        </Text>
+                        <Badge size="sm" variant="light">{groupInstances.length}</Badge>
+                      </Group>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Box
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                          gap: '16px',
+                          width: '100%',
+                        }}
+                      >
                     {groupInstances.map((instance, index) => (
-                      <Grid.Col key={instance.id} span={{ base: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
-                        <Card 
+                      <Card
+                        key={instance.id} 
                       shadow="sm"
                       style={{ 
-                        maxWidth: 480, 
                         width: '100%',
+                        maxWidth: '100%',
                         cursor: 'pointer',
                         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         textDecoration: 'none',
+                        backgroundColor: '#E0E4EB',
                       }} 
                       padding={0} 
                       radius="md" 
-                      withBorder 
                       h="100%"
                       component="a"
                       href={instance.link}
@@ -1877,59 +2231,76 @@ export default function HomePage() {
                         </Box>
                         <Box px="lg" pb="lg">
                           <Stack gap="sm">
-                            <Group justify="space-between" align="center">
-                              <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                                <Group gap={6} align="center" wrap="nowrap">
-                                  <Title order={4} style={{ flex: 1, minWidth: 0 }}>
-                                    {instance.name}
-                                  </Title>
-                                  <Badge
+                            <Group gap={6} align="center" wrap="nowrap">
+                              <Badge
+                                size="sm"
+                                variant={instance.active === false ? 'light' : 'filled'}
+                                color={instance.active === false ? 'red' : 'green'}
+                                style={{
+                                  animation: instance.active !== false ? 'pulse 2s ease-in-out infinite' : 'none',
+                                  flexShrink: 0,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {instance.active === false ? 'Inactive' : 'Active'}
+                              </Badge>
+                              <Title order={4} style={{ flex: 1, minWidth: 0 }}>
+                                {instance.name}
+                              </Title>
+                              {isAdmin && (
+                                <Group gap={4}>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      openEditModal(instance);
+                                    }}
                                     size="sm"
-                                    variant="light"
-                                    color={instance.active === false ? 'gray' : 'green'}
                                     style={{
-                                      animation: 'pulse 2s ease-in-out infinite',
-                                      flexShrink: 0,
+                                      color: 'rgba(25, 25, 27, 0.7)',
                                     }}
                                   >
-                                    {instance.active === false ? 'Inactive' : 'Active'}
-                                  </Badge>
+                                    <IconEdit size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="red"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleDeleteClick(instance);
+                                    }}
+                                    size="sm"
+                                    style={{
+                                      color: 'rgba(220, 38, 38, 0.7)',
+                                    }}
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
                                 </Group>
-                                {instance.client && (
-                                  <Group gap={8} align="center">
-                                    {clients[instance.client]?.logo && (() => {
-                                      const logoPath = clients[instance.client]!.logo!;
-                                      return (
-                                        <Image
-                                          src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
-                                          alt={instance.client}
-                                          width={16}
-                                          height={16}
-                                          style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                                        />
-                                      );
-                                    })()}
-                                    <Text size="xs" c="dimmed">
-                                      {instance.client}
-                                    </Text>
-                                  </Group>
-                                )}
-                              </Stack>
-                              {isAdmin && (
-                                <ActionIcon
-                                  variant="subtle"
-                                  color="purple"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openEditModal(instance);
-                                  }}
-                                  size="sm"
-                                >
-                                  <IconEdit size={16} />
-                                </ActionIcon>
                               )}
                             </Group>
+                            {instance.client && (
+                              <Group gap={8} align="center">
+                                {clients[instance.client]?.logo && (() => {
+                                  const logoPath = clients[instance.client]!.logo!;
+                                  return (
+                                    <Image
+                                      src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
+                                      alt={instance.client}
+                                      width={16}
+                                      height={16}
+                                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                                    />
+                                  );
+                                })()}
+                                <Text size="xs" c="dimmed">
+                                  {instance.client}
+                                </Text>
+                              </Group>
+                            )}
                             {instance.description && (
                               <Text
                                 size="sm"
@@ -1950,11 +2321,13 @@ export default function HomePage() {
                         </Box>
                       </Stack>
                     </Card>
-                  </Grid.Col>
                     ))}
-                  </Grid>
-                </Box>
-              ))
+                      </Box>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                  );
+                })}
+              </Accordion>
             ) : (
               <Grid>
                 <Grid.Col span={12}>
@@ -2729,44 +3102,121 @@ export default function HomePage() {
           <Box>
             <Title order={4} mb="md">Clients</Title>
             <Stack gap="xs">
-              {Object.entries(editingClients).map(([clientName, client]) => {
+              {Object.entries(editingClients)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([clientName, client]) => {
                 const projectCount = instances.filter(i => i.client === clientName).length;
                 return (
-                  <Group key={clientName} gap="sm" align="center" p="sm" style={{ border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px' }}>
-                    {client.logo && (
-                      <Image
-                        src={basePath && !client.logo.startsWith(basePath) ? `${basePath}${client.logo}` : client.logo}
-                        alt={clientName}
-                        width={32}
-                        height={32}
-                        style={{ borderRadius: '4px', objectFit: 'cover' }}
-                      />
-                    )}
+                  <Group key={clientName} gap="sm" align="center" p="sm" style={{ borderRadius: '8px' }}>
+                    <Box style={{ position: 'relative', width: 32, height: 32 }}>
+                      {client.logo ? (
+                        <>
+                          <Image
+                            src={basePath && !client.logo.startsWith(basePath) ? `${basePath}${client.logo}` : client.logo}
+                            alt={clientName}
+                            width={32}
+                            height={32}
+                            style={{ borderRadius: '4px', objectFit: 'cover' }}
+                          />
+                          <ActionIcon
+                            size="xs"
+                            color="red"
+                            variant="filled"
+                            style={{
+                              position: 'absolute',
+                              top: -4,
+                              right: -4,
+                              cursor: 'pointer',
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newClients = { ...editingClients };
+                              newClients[clientName] = {
+                                ...newClients[clientName],
+                                logo: undefined,
+                              };
+                              setEditingClients(newClients);
+                            }}
+                          >
+                            <IconX size={10} />
+                          </ActionIcon>
+                        </>
+                      ) : (
+                        <Box
+                          onPaste={(e) => {
+                            e.preventDefault();
+                            const items = e.clipboardData.items;
+                            for (let i = 0; i < items.length; i++) {
+                              if (items[i].type.indexOf('image') !== -1) {
+                                const blob = items[i].getAsFile();
+                                if (blob) {
+                                  // Check if it's PNG
+                                  if (blob.type !== 'image/png') {
+                                    alert('Please paste a PNG image');
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    if (event.target?.result) {
+                                      const newClients = { ...editingClients };
+                                      newClients[clientName] = {
+                                        ...newClients[clientName],
+                                        logo: event.target.result as string,
+                                      };
+                                      setEditingClients(newClients);
+                                    }
+                                  };
+                                  reader.readAsDataURL(blob);
+                                }
+                                break;
+                              }
+                            }
+                          }}
+                          onClick={(e) => {
+                            e.currentTarget.focus();
+                          }}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            border: '2px dashed rgba(255, 255, 255, 0.3)',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'text',
+                          }}
+                          tabIndex={0}
+                          title="Click and paste PNG image (Ctrl/Cmd + V)"
+                        >
+                          <IconClipboard size={16} style={{ opacity: 0.6 }} />
+                        </Box>
+                      )}
+                    </Box>
                     <Box style={{ flex: 1 }}>
                       <Text fw={500}>{clientName}</Text>
-                      <Text size="xs" c="dimmed">{projectCount} project{projectCount !== 1 ? 's' : ''}</Text>
                     </Box>
                     <Button
                       size="xs"
                       variant="light"
                       onClick={() => {
-                        setClientFilter(clientName);
+                        setClientFilter([clientName]);
                         setClientsModalOpened(false);
                       }}
                     >
-                      View
+                      View {projectCount}
                     </Button>
-                    <ActionIcon
+                    <Button
+                      size="xs"
+                      variant="light"
                       color="red"
-                      variant="subtle"
                       onClick={() => {
-                        const newClients = { ...editingClients };
-                        delete newClients[clientName];
-                        setEditingClients(newClients);
+                        setClientToRemove(clientName);
+                        setMergeTargetClient(null);
+                        setMergeModalOpened(true);
                       }}
                     >
-                      <IconX size={16} />
-                    </ActionIcon>
+                      Remove/Merge
+                    </Button>
                   </Group>
                 );
               })}
@@ -2801,8 +3251,34 @@ export default function HomePage() {
                 >
                   Fetch Favicon
                 </Button>
+                <FileButton
+                  onChange={(file) => {
+                    if (file) {
+                      // Check if file is PNG or SVG
+                      const validTypes = ['image/png', 'image/svg+xml'];
+                      if (!validTypes.includes(file.type)) {
+                        alert('Please upload a PNG or SVG file');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        if (event.target?.result) {
+                          setEditingClientLogo(event.target.result as string);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  accept="image/png,image/svg+xml,.png,.svg"
+                >
+                  {(props) => (
+                    <Button {...props} size="sm" variant="light">
+                      Upload PNG/SVG
+                    </Button>
+                  )}
+                </FileButton>
                 <Text size="xs" c="dimmed" style={{ flex: 1 }}>
-                  Or paste an image (PNG) below
+                  Or paste an image below
                 </Text>
               </Group>
               <Box
@@ -2837,13 +3313,23 @@ export default function HomePage() {
                 }}
               >
                 {editingClientLogo ? (
-                  <Image
-                    src={editingClientLogo}
-                    alt="Client logo"
-                    width={100}
-                    height={100}
-                    style={{ borderRadius: '4px', objectFit: 'contain' }}
-                  />
+                  <Stack gap="xs" align="center">
+                    <Image
+                      src={editingClientLogo}
+                      alt="Client logo"
+                      width={100}
+                      height={100}
+                      style={{ borderRadius: '4px', objectFit: 'contain' }}
+                    />
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="red"
+                      onClick={() => setEditingClientLogo('')}
+                    >
+                      Remove Logo
+                    </Button>
+                  </Stack>
                 ) : (
                   <Text size="sm" c="dimmed">Paste image here (Ctrl/Cmd + V)</Text>
                 )}
@@ -2878,7 +3364,7 @@ export default function HomePage() {
                   }}
                   disabled={!editingClientName}
                 >
-                  Add Client
+                  {editingClients[editingClientName] ? 'Update Client' : 'Add Client'}
                 </Button>
               </Group>
             </Stack>
@@ -2899,6 +3385,115 @@ export default function HomePage() {
               Save
             </Button>
           </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={mergeModalOpened}
+        onClose={() => {
+          setMergeModalOpened(false);
+          setClientToRemove(null);
+          setMergeTargetClient(null);
+        }}
+        title="Remove/Merge Client"
+        size="md"
+      >
+        <Stack gap="md">
+          {clientToRemove && (
+            <>
+              <Alert color="yellow">
+                You are about to remove <strong>{clientToRemove}</strong>.
+                {instances.filter(i => i.client === clientToRemove).length > 0 && (
+                  <> This will affect {instances.filter(i => i.client === clientToRemove).length} instance(s).</>
+                )}
+              </Alert>
+              
+              <Select
+                label="Merge with client (or leave empty to remove)"
+                placeholder="Select a client to merge with, or leave empty to remove"
+                data={Object.keys(editingClients)
+                  .filter(name => name !== clientToRemove)
+                  .sort((a, b) => a.localeCompare(b))
+                  .map(name => ({ value: name, label: name }))}
+                value={mergeTargetClient}
+                onChange={setMergeTargetClient}
+                clearable
+              />
+              
+              <Text size="sm" c="dimmed">
+                {mergeTargetClient 
+                  ? `All instances from "${clientToRemove}" will be reassigned to "${mergeTargetClient}" and "${clientToRemove}" will be removed.`
+                  : `All instances from "${clientToRemove}" will have their client field cleared and "${clientToRemove}" will be removed.`}
+              </Text>
+              
+              <Group justify="flex-end" mt="md">
+                <Button
+                  variant="light"
+                  onClick={() => {
+                    setMergeModalOpened(false);
+                    setClientToRemove(null);
+                    setMergeTargetClient(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="red"
+                  onClick={() => {
+                    if (clientToRemove) {
+                      mergeClient(clientToRemove, mergeTargetClient);
+                    }
+                  }}
+                >
+                  {mergeTargetClient ? 'Merge' : 'Remove'}
+                </Button>
+              </Group>
+            </>
+          )}
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={deleteModalOpened}
+        onClose={() => {
+          setDeleteModalOpened(false);
+          setInstanceToDelete(null);
+        }}
+        title="Delete Project"
+        size="md"
+      >
+        <Stack gap="md">
+          {instanceToDelete && (
+            <>
+              <Alert color="red">
+                You are about to delete <strong>{instanceToDelete.name}</strong>.
+                <br />
+                This action cannot be undone.
+              </Alert>
+              
+              <Text size="sm" c="dimmed">
+                Are you sure you want to delete this project? All associated data will be permanently removed.
+              </Text>
+              
+              <Group justify="flex-end" mt="md">
+                <Button
+                  variant="light"
+                  onClick={() => {
+                    setDeleteModalOpened(false);
+                    setInstanceToDelete(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="red"
+                  onClick={handleDelete}
+                >
+                  Delete
+                </Button>
+              </Group>
+            </>
+          )}
         </Stack>
       </Modal>
     </Container>

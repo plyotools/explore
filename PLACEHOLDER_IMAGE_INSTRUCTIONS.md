@@ -14,3 +14,4 @@ The app will automatically use `/placeholder.png` for any project that doesn't h
 
 If you prefer a different filename or format, update the `PLACEHOLDER_IMAGE` constant in `app/page.tsx` (line 91).
 
+
