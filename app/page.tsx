@@ -1330,13 +1330,42 @@ export default function HomePage() {
 
   const clientOptions = useMemo(() => {
     const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+    
+    // Filter instances excluding the clientFilter to get base filtered set
+    const baseFiltered = instances.filter((instance) => {
+      // Partner role: only show starred instances
+      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
+      
+      if (typeFilter.length > 0 && !typeFilter.includes(instance.type)) return false;
+      if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
+      if (statusFilter.length > 0) {
+        const statusMatch = statusFilter.some(status => {
+          if (status === 'active') return instance.active !== false;
+          if (status === 'inactive') return instance.active === false;
+          return false;
+        });
+        if (!statusMatch) return false;
+      }
+      if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
+      if (featuredFilter.length > 0) {
+        const featuredMatch = featuredFilter.some(f => {
+          if (f === 'featured') return featuredInstances.has(instance.id);
+          if (f === 'not-featured') return !featuredInstances.has(instance.id);
+          return false;
+        });
+        if (!featuredMatch) return false;
+      }
+      return true;
+    });
+
     const clientNames = Array.from(
       new Set(
-        instances
+        baseFiltered
           .map((i) => (i.client || '').trim())
           .filter((c) => c.length > 0)
       )
     ).sort((a, b) => a.localeCompare(b));
+    
     return clientNames.map((c) => {
       const clientLogo = clients[c]?.logo;
       const logoPath = clientLogo 
@@ -1344,9 +1373,10 @@ export default function HomePage() {
             ? `${basePath}${clientLogo}` 
             : clientLogo)
         : undefined;
-      return { value: c, label: c, image: logoPath };
+      const count = baseFiltered.filter(i => (i.client || '').trim() === c).length;
+      return { value: c, label: `${c} (${count})`, image: logoPath };
     });
-  }, [instances, clients]);
+  }, [instances, clients, typeFilter, selectedFeature, statusFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
 
   const projectOptions = useMemo(() => {
     const uniqueProjects = Array.from(
@@ -1355,10 +1385,45 @@ export default function HomePage() {
     return uniqueProjects.map((name) => ({ value: name, label: name }));
   }, [instances]);
 
-  const typeOptions = useMemo(() => [
-    { value: 'Apartment Chooser', label: 'Apartment Chooser' },
-    { value: 'Virtual Showroom', label: 'Virtual Showroom' },
-  ], []);
+  // Compute counts for type options (excluding typeFilter from the count logic)
+  const typeOptionsWithCounts = useMemo(() => {
+    // Filter instances excluding the typeFilter to get base filtered set
+    const baseFiltered = instances.filter((instance) => {
+      // Partner role: only show starred instances
+      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
+      
+      if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
+      if (statusFilter.length > 0) {
+        const statusMatch = statusFilter.some(status => {
+          if (status === 'active') return instance.active !== false;
+          if (status === 'inactive') return instance.active === false;
+          return false;
+        });
+        if (!statusMatch) return false;
+      }
+      if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
+      if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
+      if (featuredFilter.length > 0) {
+        const featuredMatch = featuredFilter.some(f => {
+          if (f === 'featured') return featuredInstances.has(instance.id);
+          if (f === 'not-featured') return !featuredInstances.has(instance.id);
+          return false;
+        });
+        if (!featuredMatch) return false;
+      }
+      return true;
+    });
+
+    const apartmentChooserCount = baseFiltered.filter(i => i.type === 'Apartment Chooser').length;
+    const virtualShowroomCount = baseFiltered.filter(i => i.type === 'Virtual Showroom').length;
+
+    return [
+      { value: 'Apartment Chooser', label: `Apartment Chooser (${apartmentChooserCount})` },
+      { value: 'Virtual Showroom', label: `Virtual Showroom (${virtualShowroomCount})` },
+    ];
+  }, [instances, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
+
+  const typeOptions = typeOptionsWithCounts;
 
   const statusOptions = useMemo(() => [
     { value: 'active', label: 'Active' },
@@ -1684,80 +1749,79 @@ export default function HomePage() {
 
       <Stack gap="md" mb="xl">
         {shouldShowFilters && (
-          <Group gap="sm" align="flex-end" wrap="wrap">
-            <FilterDropdown
-              ref={typeFilterRef}
-              label="Type"
-              data={typeOptions}
-              selectedValues={typeFilter}
-              onApply={setTypeFilter}
-              onClear={() => setTypeFilter([])}
-              searchPlaceholder="Search types"
-              onNavigateRight={() => clientFilterRef.current?.open()}
-              isLeftmost={true}
-            />
-            <FilterDropdown
-              ref={clientFilterRef}
-              label="Client"
-              data={clientOptions}
-              selectedValues={clientFilter}
-              onApply={setClientFilter}
-              onClear={() => setClientFilter([])}
-              searchPlaceholder="Search clients"
-              onNavigateLeft={() => typeFilterRef.current?.open()}
-              onNavigateRight={() => projectFilterRef.current?.open()}
-            />
-            <FilterDropdown
-              ref={projectFilterRef}
-              label="Project"
-              data={projectOptions}
-              selectedValues={projectFilter}
-              onApply={setProjectFilter}
-              onClear={() => setProjectFilter([])}
-              searchPlaceholder="Search projects"
-              onNavigateLeft={() => clientFilterRef.current?.open()}
-              onNavigateRight={() => featureFilterRef.current?.open()}
-            />
-            <FilterDropdown
-              ref={featureFilterRef}
-              label="Feature"
-              data={flattenedFeatures}
-              selectedValues={selectedFeature}
-              onApply={setSelectedFeature}
-              onClear={() => setSelectedFeature([])}
-              searchPlaceholder="Search features"
-              onNavigateLeft={() => projectFilterRef.current?.open()}
-              onNavigateRight={() => statusFilterRef.current?.open()}
-            />
-            <FilterDropdown
-              ref={statusFilterRef}
-              label="Status"
-              data={statusOptions}
-              selectedValues={statusFilter}
-              onApply={setStatusFilter}
-              onClear={() => setStatusFilter([])}
-              searchPlaceholder="Search status"
-              onNavigateLeft={() => featureFilterRef.current?.open()}
-              onNavigateRight={() => userRole !== 'partner' && starredFilterRef.current?.open()}
-              isRightmost={userRole === 'partner'}
-            />
-            {userRole !== 'partner' && (
+          <Group gap="sm" align="flex-end" wrap="wrap" justify="space-between">
+            <Group gap="sm" align="flex-end" wrap="wrap">
               <FilterDropdown
-                ref={starredFilterRef}
-                label="Starred"
-                data={featuredOptions}
-                selectedValues={featuredFilter}
-                onApply={setFeaturedFilter}
-                onClear={() => setFeaturedFilter([])}
-                searchPlaceholder="Search"
-                onNavigateLeft={() => statusFilterRef.current?.open()}
-                isRightmost={true}
+                ref={typeFilterRef}
+                label="Type"
+                data={typeOptions}
+                selectedValues={typeFilter}
+                onApply={setTypeFilter}
+                onClear={() => setTypeFilter([])}
+                searchPlaceholder="Search types"
+                onNavigateRight={() => clientFilterRef.current?.open()}
+                isLeftmost={true}
               />
-            )}
-          </Group>
-        )}
-        {shouldShowFilters && (
-          <Group gap="sm" align="flex-end" wrap="wrap">
+              <FilterDropdown
+                ref={clientFilterRef}
+                label="Client"
+                data={clientOptions}
+                selectedValues={clientFilter}
+                onApply={setClientFilter}
+                onClear={() => setClientFilter([])}
+                searchPlaceholder="Search clients"
+                onNavigateLeft={() => typeFilterRef.current?.open()}
+                onNavigateRight={() => projectFilterRef.current?.open()}
+              />
+              <FilterDropdown
+                ref={projectFilterRef}
+                label="Project"
+                data={projectOptions}
+                selectedValues={projectFilter}
+                onApply={setProjectFilter}
+                onClear={() => setProjectFilter([])}
+                searchPlaceholder="Search projects"
+                onNavigateLeft={() => clientFilterRef.current?.open()}
+                onNavigateRight={() => featureFilterRef.current?.open()}
+              />
+              <FilterDropdown
+                ref={featureFilterRef}
+                label="Feature"
+                data={flattenedFeatures}
+                selectedValues={selectedFeature}
+                onApply={setSelectedFeature}
+                onClear={() => setSelectedFeature([])}
+                searchPlaceholder="Search features"
+                onNavigateLeft={() => projectFilterRef.current?.open()}
+                onNavigateRight={() => statusFilterRef.current?.open()}
+              />
+              <FilterDropdown
+                ref={statusFilterRef}
+                label="Status"
+                data={statusOptions}
+                selectedValues={statusFilter}
+                onApply={setStatusFilter}
+                onClear={() => setStatusFilter([])}
+                searchPlaceholder="Search status"
+                onNavigateLeft={() => featureFilterRef.current?.open()}
+                onNavigateRight={() => userRole !== 'partner' && starredFilterRef.current?.open()}
+                isRightmost={userRole === 'partner'}
+              />
+              {userRole !== 'partner' && (
+                <FilterDropdown
+                  ref={starredFilterRef}
+                  label="Starred"
+                  data={featuredOptions}
+                  selectedValues={featuredFilter}
+                  onApply={setFeaturedFilter}
+                  onClear={() => setFeaturedFilter([])}
+                  searchPlaceholder="Search"
+                  onNavigateLeft={() => statusFilterRef.current?.open()}
+                  isRightmost={true}
+                />
+              )}
+            </Group>
+            <Group gap="sm" align="flex-end" wrap="wrap">
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1796,6 +1860,7 @@ export default function HomePage() {
                 />
               )}
             </Group>
+          </Group>
         )}
             {/* Filter Tags Row */}
             {shouldShowFilters && (typeFilter.length > 0 || clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
