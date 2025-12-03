@@ -948,6 +948,13 @@ export default function HomePage() {
     // Instead, rely on a simple client-side session stored in localStorage.
     if (typeof window !== 'undefined') {
       const basePath = window.location.pathname.startsWith('/explore') ? '/explore' : '';
+      const currentPath = window.location.pathname;
+
+      // Don't check auth if we're already on the login page
+      if (currentPath.includes('/login')) {
+        setCheckingAuth(false);
+        return;
+      }
 
       if (process.env.NODE_ENV === 'production') {
         const session = window.localStorage.getItem('explore_session');
@@ -963,7 +970,10 @@ export default function HomePage() {
         }
 
         // Not authenticated in production static export – send to login under correct base path
-        window.location.replace(`${basePath}/login`);
+        // Only redirect if we're not already going to login
+        if (!currentPath.includes('/login')) {
+          window.location.replace(`${basePath}/login`);
+        }
         return;
       }
     }
@@ -1054,9 +1064,25 @@ export default function HomePage() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/', { method: 'DELETE' });
+    // Clear server-side session if in development
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        await fetch('/api/auth/', { method: 'DELETE' });
+      } catch (e) {
+        // Ignore errors in production/static mode
+      }
+    }
+    
+    // Clear client-side session (works in both dev and production)
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('explore_session');
+      window.localStorage.removeItem('explore_user_role');
+      window.localStorage.removeItem('explore_is_admin');
+    }
+    
     setAuthenticated(false);
     setIsAdmin(false);
+    
     if (typeof window !== 'undefined') {
       // Determine basePath - check if we're on GitHub Pages
       const hostname = window.location.hostname;
@@ -1070,7 +1096,8 @@ export default function HomePage() {
         basePath = '/explore';
       }
       
-      window.location.replace(`${basePath}/login`);
+      // Force a full page reload to clear state
+      window.location.href = `${basePath}/login`;
     }
   };
 

@@ -39,18 +39,25 @@ export default function LoginPage() {
     if (typeof window === 'undefined') return;
 
     const basePath = getBasePath();
+    const currentPath = window.location.pathname;
 
-    // If we already have a client-side session, skip login
+    // Check if we're already on the login page - if so, show the form and don't redirect
+    if (currentPath.includes('/login')) {
+      // We're on the login page, show the form
+      return;
+    }
+
+    // If we already have a client-side session and we're NOT on login page, redirect to home
     const session = window.localStorage.getItem('explore_session');
     if (session === 'authenticated') {
-      window.location.href = basePath || '/';
+      window.location.replace(basePath || '/');
       return;
     }
 
     // In development, keep existing server-side auth check
     if (process.env.NODE_ENV !== 'production') {
       const timer = setTimeout(() => {
-        fetch('/api/auth/')
+        fetch(`${basePath}/api/auth/`)
           .then(res => {
             if (res.ok) {
               return res.json();
@@ -90,7 +97,14 @@ export default function LoginPage() {
         const data = await response.json();
 
         if (response.ok) {
-          window.location.href = basePath || '/';
+          // Also set localStorage for consistency
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('explore_session', 'authenticated');
+            window.localStorage.setItem('explore_user_role', data.role || 'viewer');
+            window.localStorage.setItem('explore_is_admin', (data.isAdmin || false).toString());
+          }
+          // Use replace to avoid back button issues
+          window.location.replace(basePath || '/');
           return;
         } else {
           setError(data.error || 'Invalid password');
@@ -106,7 +120,8 @@ export default function LoginPage() {
           window.localStorage.setItem('explore_user_role', result.role);
           window.localStorage.setItem('explore_is_admin', result.role === 'admin' ? 'true' : 'false');
         }
-        window.location.href = basePath || '/';
+        // Use replace to avoid back button issues and ensure clean redirect
+        window.location.replace(basePath || '/');
       } else {
         setError('Invalid password');
       }
