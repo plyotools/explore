@@ -1456,11 +1456,42 @@ export default function HomePage() {
   }, [instances, clients, typeFilter, selectedFeature, statusFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
 
   const projectOptions = useMemo(() => {
+    // Filter instances based on role and other filters (excluding projectFilter)
+    const baseFiltered = instances.filter((instance) => {
+      // Partner role: only show starred instances
+      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
+      
+      if (typeFilter.length > 0 && !typeFilter.includes(instance.type)) return false;
+      if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
+      if (statusFilter.length > 0) {
+        const statusMatch = statusFilter.some(status => {
+          if (status === 'active') return instance.active !== false;
+          if (status === 'inactive') return instance.active === false;
+          return false;
+        });
+        if (!statusMatch) return false;
+      }
+      if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
+      if (featuredFilter.length > 0) {
+        const featuredMatch = featuredFilter.some(f => {
+          if (f === 'featured') return featuredInstances.has(instance.id);
+          if (f === 'not-featured') return !featuredInstances.has(instance.id);
+          return false;
+        });
+        if (!featuredMatch) return false;
+      }
+      return true;
+    });
+    
     const uniqueProjects = Array.from(
-      new Set(instances.map((i) => i.name))
+      new Set(baseFiltered.map((i) => i.name))
     ).sort((a, b) => a.localeCompare(b));
-    return uniqueProjects.map((name) => ({ value: name, label: name }));
-  }, [instances]);
+    
+    return uniqueProjects.map((name) => {
+      const count = baseFiltered.filter(i => i.name === name).length;
+      return { value: name, label: count > 1 ? `${name} (${count})` : name };
+    });
+  }, [instances, userRole, featuredInstances, typeFilter, selectedFeature, statusFilter, clientFilter, featuredFilter]);
 
   // Compute counts for type options (excluding typeFilter from the count logic)
   const typeOptionsWithCounts = useMemo(() => {
