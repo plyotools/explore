@@ -2240,18 +2240,22 @@ export default function HomePage() {
                                       // Icon not found, silently continue
                                     }
                                   }
+                                  const textColor = featureColor 
+                                    ? (isDark ? '#FFFFFF' : '#19191B') 
+                                    : '#FFFFFF';
+                                  
                                   return (
                                     <Badge 
                                       key={feature} 
                                       size="sm" 
                                       variant="light" 
+                                      data-feature-badge="true"
+                                      data-is-dark={isDark ? 'true' : 'false'}
                                       styles={{
                                         root: {
                                           backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
                                           // Ensure light backgrounds get dark text, dark backgrounds get white text
-                                          color: featureColor 
-                                            ? (isDark ? '#FFFFFF' : '#19191B') 
-                                            : '#FFFFFF', // Default to white for transparent backgrounds
+                                          color: textColor,
                                           fontWeight: 500,
                                         },
                                       }}
@@ -2555,18 +2559,22 @@ export default function HomePage() {
                                                 // Icon not found, silently continue
                                               }
                                             }
+                                            const textColor = featureColor 
+                                              ? (isDark ? '#FFFFFF' : '#19191B') 
+                                              : '#FFFFFF';
+                                            
                                             return (
                                               <Badge 
                                                 key={feature} 
                                                 size="sm" 
                                                 variant="light" 
+                                                data-feature-badge="true"
+                                                data-is-dark={isDark ? 'true' : 'false'}
                                                 styles={{
                                                   root: {
                                                     backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
                                                     // Ensure light backgrounds get dark text, dark backgrounds get white text
-                                                    color: featureColor 
-                                                      ? (isDark ? '#FFFFFF' : '#19191B') 
-                                                      : '#FFFFFF', // Default to white for transparent backgrounds
+                                                    color: textColor,
                                                     fontWeight: 500,
                                                   },
                                                 }}
