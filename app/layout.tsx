@@ -169,6 +169,13 @@ export default function RootLayout({
           [data-mantine-color-scheme="dark"] .mantine-Card-root .mantine-Badge-root[data-feature-badge="true"][data-is-dark="true"] {
             color: #FFFFFF !important;
           }
+          /* Feature color picker buttons in modals - ensure proper text color based on background */
+          [data-mantine-color-scheme="dark"] .mantine-Button-root[data-feature-color-button="true"][data-is-dark="false"] {
+            color: #19191B !important;
+          }
+          [data-mantine-color-scheme="dark"] .mantine-Button-root[data-feature-color-button="true"][data-is-dark="true"] {
+            color: #FFFFFF !important;
+          }
           /* Links should be visible */
           [data-mantine-color-scheme="dark"] a {
             color: #F0F2F9 !important;

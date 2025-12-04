@@ -2970,21 +2970,33 @@ export default function HomePage() {
                           withArrow
                         >
                           <Popover.Target>
-                            <Button
-                              variant="light"
-                              size="xs"
-                              onClick={() => {
-                                setColorPickerOpen({ ...colorPickerOpen, [`${type}-${index}`]: true });
-                              }}
-                              style={{
-                                backgroundColor: (typeof feature === 'string' ? featureColors[feature] : feature.color) || 'transparent',
-                                border: (typeof feature === 'string' ? featureColors[feature] : feature.color) ? `2px solid ${(typeof feature === 'string' ? featureColors[feature] : feature.color)}` : '1px solid rgba(255, 255, 255, 0.3)',
-                                color: (typeof feature === 'string' ? featureColors[feature] : feature.color) ? (isColorDark((typeof feature === 'string' ? featureColors[feature] : feature.color) || '') ? 'white' : '#0A082D') : undefined,
-                                minWidth: '60px',
-                              }}
-                            >
-                              {(typeof feature === 'string' ? featureColors[feature] : feature.color) ? 'Color' : 'Pick'}
-                            </Button>
+                            {(() => {
+                              const featureColor = (typeof feature === 'string' ? featureColors[feature] : feature.color) || '';
+                              const isDarkColor = featureColor ? isColorDark(featureColor) : false;
+                              const textColor = featureColor 
+                                ? (isDarkColor ? '#FFFFFF' : '#19191B') 
+                                : undefined;
+                              
+                              return (
+                                <Button
+                                  variant="light"
+                                  size="xs"
+                                  data-feature-color-button="true"
+                                  data-is-dark={isDarkColor ? 'true' : 'false'}
+                                  onClick={() => {
+                                    setColorPickerOpen({ ...colorPickerOpen, [`${type}-${index}`]: true });
+                                  }}
+                                  style={{
+                                    backgroundColor: featureColor || 'transparent',
+                                    border: featureColor ? `2px solid ${featureColor}` : '1px solid rgba(255, 255, 255, 0.3)',
+                                    color: textColor,
+                                    minWidth: '60px',
+                                  }}
+                                >
+                                  {featureColor ? 'Color' : 'Pick'}
+                                </Button>
+                              );
+                            })()}
                           </Popover.Target>
                           <Popover.Dropdown>
                             <Stack gap="xs" p="xs">
