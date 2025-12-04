@@ -158,7 +158,7 @@ export default function LoginPage() {
           }}
         >
           <Title order={2} ta="center" mb="md" style={{ color: '#F0F2F9' }}>
-            Login
+            Explore Showcases
           </Title>
           <Text size="sm" c="dimmed" ta="center" mb="lg" style={{ color: '#B2BAD3' }}>
             Enter password to access the showcase
