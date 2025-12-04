@@ -758,8 +758,9 @@ export default function HomePage() {
   const isColorDark = useCallback((color: string): boolean => {
     if (!color) return false;
     const lightness = getColorLightness(color);
-    // Lower threshold to ensure bright colors get dark text
-    return lightness < 0.45;
+    // Threshold: values below 0.5 are dark (use white text), above are light (use dark text)
+    // Using 0.5 for balanced detection
+    return lightness < 0.5;
   }, [getColorLightness]);
 
   // Load featured instances from server (or public file for static export)
@@ -2247,7 +2248,11 @@ export default function HomePage() {
                                       styles={{
                                         root: {
                                           backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                          color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
+                                          // Ensure light backgrounds get dark text, dark backgrounds get white text
+                                          color: featureColor 
+                                            ? (isDark ? '#FFFFFF' : '#19191B') 
+                                            : '#FFFFFF', // Default to white for transparent backgrounds
+                                          fontWeight: 500,
                                         },
                                       }}
                                       leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
@@ -2558,7 +2563,11 @@ export default function HomePage() {
                                                 styles={{
                                                   root: {
                                                     backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                                    color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
+                                                    // Ensure light backgrounds get dark text, dark backgrounds get white text
+                                                    color: featureColor 
+                                                      ? (isDark ? '#FFFFFF' : '#19191B') 
+                                                      : '#FFFFFF', // Default to white for transparent backgrounds
+                                                    fontWeight: 500,
                                                   },
                                                 }}
                                                 leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
