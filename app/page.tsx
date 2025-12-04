@@ -48,7 +48,7 @@ const pulseKeyframes = `
     border: none !important;
   }
 `;
-import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck, IconDotsVertical } from '@tabler/icons-react';
+import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck, IconDotsVertical, IconDownload, IconUpload, IconDatabaseOff } from '@tabler/icons-react';
 import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './lib/types';
 
 // Icon Picker Component
@@ -165,6 +165,17 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
       setTimeout(() => {
         if (dropdownRef.current) {
           dropdownRef.current.focus();
+        }
+        // Apply dark theme styles directly to the input element
+        if (searchInputRef.current) {
+          // Find the actual input element
+          const inputElement = searchInputRef.current.querySelector('input') as HTMLInputElement;
+          if (inputElement) {
+            inputElement.style.backgroundColor = '#1F1D4D';
+            inputElement.style.color = '#F0F2F9';
+            inputElement.style.borderColor = '#403B7D';
+            inputElement.style.border = '1px solid #403B7D';
+          }
         }
       }, 100);
     }
@@ -326,13 +337,14 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
                   handleKeyDown(e);
                 }
               }}
-              leftSection={<IconSearch size={16} color="#8027F4" />}
+              leftSection={<IconSearch size={16} color="#F0F2F9" />}
               size="sm"
+              className="filter-search-input"
               styles={{
                 input: {
-                  border: '1px solid #D0D1D5',
-                  backgroundColor: '#FFFFFF',
-                  color: '#1A1B1E',
+                  border: '1px solid #403B7D',
+                  backgroundColor: '#1F1D4D',
+                  color: '#F0F2F9',
                   boxShadow: 'none',
                 }
               }}
@@ -619,6 +631,9 @@ export default function HomePage() {
   const [mergeModalOpened, setMergeModalOpened] = useState(false);
   const [clientToRemove, setClientToRemove] = useState<string | null>(null);
   const [mergeTargetClient, setMergeTargetClient] = useState<string | null>(null);
+  const [importModalOpened, setImportModalOpened] = useState(false);
+  const [deleteAllModalOpened, setDeleteAllModalOpened] = useState(false);
+  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState('');
 
   // Shared styles for filter dropdowns (text-link style)
   const filterDropdownStyles = {
@@ -1613,6 +1628,93 @@ export default function HomePage() {
                 >
                   Clients
                 </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item
+                  leftSection={<IconDownload size={16} />}
+                  onClick={async () => {
+                    try {
+                      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+                      
+                      // Try API first (development/server mode)
+                      let response: Response | null = null;
+                      try {
+                        response = await fetch(`${basePath}/api/export`);
+                        if (!response.ok) {
+                          response = null;
+                        }
+                      } catch (error) {
+                        console.warn('API export failed, trying fallback:', error);
+                        response = null;
+                      }
+                      
+                      let data: any;
+                      
+                      if (response && response.ok) {
+                        data = await response.json();
+                      } else {
+                        // Fallback: create export from client-side data
+                        // This is a limited export that doesn't include screenshots/logos from server
+                        data = {
+                          version: '1.0',
+                          exportDate: new Date().toISOString(),
+                          projects: instances.map(instance => ({
+                            metadata: instance,
+                            screenshot: instance.screenshot?.startsWith('data:') ? instance.screenshot : undefined,
+                          })),
+                          clients,
+                          clientLogos: {},
+                          features,
+                          featuredInstances: Array.from(featuredInstances),
+                          colorPalette,
+                        };
+                      }
+                      
+                      // Download the export file
+                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `explore-backup-${new Date().toISOString().split('T')[0]}.json`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      
+                      if (response && response.ok) {
+                        alert('Export completed successfully!');
+                      } else {
+                        alert('Export completed (client-side fallback - screenshots and logos may not be included). For full export, use development mode.');
+                      }
+                    } catch (error) {
+                      console.error('Export error:', error);
+                      alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    }
+                  }}
+                >
+                  Export All Data
+                </Menu.Item>
+                {isAdmin && (
+                  <>
+                    <Menu.Item
+                      leftSection={<IconUpload size={16} />}
+                      onClick={() => {
+                        setImportModalOpened(true);
+                      }}
+                    >
+                      Import Data
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<IconDatabaseOff size={16} />}
+                      color="red"
+                      onClick={() => {
+                        setDeleteAllModalOpened(true);
+                        setDeleteAllConfirmText('');
+                      }}
+                    >
+                      Delete Everything
+                    </Menu.Item>
+                  </>
+                )}
               </Menu.Dropdown>
             </Menu>
             </>

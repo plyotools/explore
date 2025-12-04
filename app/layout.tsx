@@ -195,15 +195,15 @@ export default function RootLayout({
             color: #F0F2F9 !important;
             background-color: #2A275D !important;
           }
-          /* Starred projects - white star on yellow background */
+          /* Starred projects - yellow star on black background */
           [data-mantine-color-scheme="dark"] .mantine-ActionIcon-root[data-starred="true"] {
-            color: #FFFFFF !important;
-            background-color: #FFD700 !important;
+            color: #FFB800 !important;
+            background-color: #000000 !important;
           }
           [data-mantine-color-scheme="dark"] .mantine-ActionIcon-root[data-starred="true"] svg {
-            color: #FFFFFF !important;
-            fill: #FFFFFF !important;
-            stroke: #FFFFFF !important;
+            color: #FFB800 !important;
+            fill: #FFB800 !important;
+            stroke: #FFB800 !important;
           }
           /* Select dropdowns - light/positive background */
           [data-mantine-color-scheme="dark"] .mantine-Select-dropdown {
@@ -339,6 +339,23 @@ export default function RootLayout({
           }
           [data-mantine-color-scheme="dark"] .mantine-Accordion-panel {
             background-color: #19191B !important;
+          }
+          /* Filter dropdown search input - inverted dark theme */
+          .filter-search-input .mantine-TextInput-input,
+          .filter-search-input input,
+          .mantine-Popover-dropdown .filter-search-input .mantine-TextInput-input,
+          .mantine-Popover-dropdown .filter-search-input input {
+            background-color: #1F1D4D !important;
+            color: #F0F2F9 !important;
+            border-color: #403B7D !important;
+            border: 1px solid #403B7D !important;
+          }
+          .filter-search-input .mantine-TextInput-input::placeholder,
+          .filter-search-input input::placeholder,
+          .mantine-Popover-dropdown .filter-search-input .mantine-TextInput-input::placeholder,
+          .mantine-Popover-dropdown .filter-search-input input::placeholder {
+            color: #B2BAD3 !important;
+            opacity: 1 !important;
           }
           @keyframes pulse {
             0%, 100% {

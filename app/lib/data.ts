@@ -566,11 +566,31 @@ export async function exportAllData(): Promise<ExportData> {
   const clients = await getClients();
   
   // Export client logos as base64
+  // First, check if clients already have logos as data URIs
+  for (const clientName in clients) {
+    if (clients[clientName]?.logo) {
+      const logo = clients[clientName].logo;
+      if (logo.startsWith('data:')) {
+        // Already a data URI, use it directly
+        clientLogos[clientName] = logo;
+      }
+    }
+  }
+  
+  // Then, try to read logos from file system for clients that don't have data URIs
   const clientsDir = path.join(process.cwd(), 'public', 'data', 'clients');
   try {
     const logoFiles = await fs.readdir(clientsDir);
     for (const logoFile of logoFiles) {
       if (logoFile.match(/\.(png|jpg|jpeg|webp|svg)$/i)) {
+        // Extract client name from filename (remove extension)
+        const clientName = logoFile.replace(/\.(png|jpg|jpeg|webp|svg)$/i, '');
+        
+        // Skip if we already have a data URI for this client
+        if (clientLogos[clientName]) {
+          continue;
+        }
+        
         try {
           const logoPath = path.join(clientsDir, logoFile);
           const logoBuffer = await fs.readFile(logoPath);
@@ -579,9 +599,6 @@ export async function exportAllData(): Promise<ExportData> {
                           extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : 
                           extension === '.webp' ? 'image/webp' : 'image/svg+xml';
           const base64Logo = `data:${mimeType};base64,${logoBuffer.toString('base64')}`;
-          
-          // Extract client name from filename (remove extension)
-          const clientName = logoFile.replace(/\.(png|jpg|jpeg|webp|svg)$/i, '');
           clientLogos[clientName] = base64Logo;
         } catch (error) {
           console.error(`Error reading logo ${logoFile}:`, error);
@@ -589,7 +606,10 @@ export async function exportAllData(): Promise<ExportData> {
       }
     }
   } catch (error) {
-    console.error('Error reading clients directory:', error);
+    // Directory might not exist, that's okay
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('Error reading clients directory:', error);
+    }
   }
   
   // Export features

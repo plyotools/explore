@@ -1,11 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { exportAllData } from '@/app/lib/data';
-import { isAuthenticated } from '@/app/lib/auth';
+import { isAuthenticated, getUserRole } from '@/app/lib/auth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const authenticated = await isAuthenticated();
-    if (!authenticated) {
+    const userRole = await getUserRole();
+
+    if (!authenticated || (userRole !== 'admin' && userRole !== 'viewer')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     

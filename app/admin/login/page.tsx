@@ -52,6 +52,7 @@ export default function LoginPage() {
           margin: 0 !important;
           padding: 0 !important;
           overflow-x: hidden;
+          background-color: #19191B !important;
         }
       `}} />
       <Box 
@@ -65,6 +66,7 @@ export default function LoginPage() {
           width: '100%',
           maxWidth: '100%',
           boxSizing: 'border-box',
+          backgroundColor: '#19191B',
         }}
       >
         <Paper 
