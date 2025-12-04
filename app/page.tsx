@@ -1547,34 +1547,51 @@ export default function HomePage() {
     new Set(instances.flatMap((i) => i.features))
   ).sort();
 
-  const groupedFeatures = useMemo(() => {
-    const processFeatures = (type: InstanceType) => {
-      const featureSet = new Set<string>();
-      features[type]
-        .map(f => typeof f === 'string' ? f : f.name)
-        .filter(f => instances.some(i => i.type === type && i.features.includes(f)))
-        .forEach(f => featureSet.add(f));
-      
-      return Array.from(featureSet)
-        .sort((a, b) => a.localeCompare(b))
-        .map(f => ({ value: f, label: f }));
-    };
-
-    return [
-      {
-        group: 'Virtual Showroom',
-        items: processFeatures('Virtual Showroom'),
-      },
-      {
-        group: 'Apartment Chooser',
-        items: processFeatures('Apartment Chooser'),
-      },
-    ].filter(group => group.items.length > 0);
-  }, [features, instances]);
-
+  // Compute feature options based on filtered instances (excluding selectedFeature from filter)
   const flattenedFeatures = useMemo(() => {
-    return groupedFeatures.flatMap(group => group.items);
-  }, [groupedFeatures]);
+    // Filter instances excluding selectedFeature to get base filtered set
+    const baseFiltered = instances.filter((instance) => {
+      // Partner role: only show starred instances
+      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
+      
+      if (typeFilter.length > 0 && !typeFilter.includes(instance.type)) return false;
+      if (statusFilter.length > 0) {
+        const statusMatch = statusFilter.some(status => {
+          if (status === 'active') return instance.active !== false;
+          if (status === 'inactive') return instance.active === false;
+          return false;
+        });
+        if (!statusMatch) return false;
+      }
+      if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
+      if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
+      if (featuredFilter.length > 0) {
+        const featuredMatch = featuredFilter.some(f => {
+          if (f === 'featured') return featuredInstances.has(instance.id);
+          if (f === 'not-featured') return !featuredInstances.has(instance.id);
+          return false;
+        });
+        if (!featuredMatch) return false;
+      }
+      return true;
+    });
+
+    // Get all unique features from the filtered instances
+    const featureCounts = new Map<string, number>();
+    baseFiltered.forEach(instance => {
+      instance.features.forEach(feature => {
+        featureCounts.set(feature, (featureCounts.get(feature) || 0) + 1);
+      });
+    });
+
+    // Convert to array with counts and sort
+    return Array.from(featureCounts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([feature, count]) => ({
+        value: feature,
+        label: `${feature} (${count})`
+      }));
+  }, [instances, userRole, featuredInstances, typeFilter, statusFilter, clientFilter, projectFilter, featuredFilter]);
 
 
   // TODO: RESTORE GROUPING FEATURE - Commented out for now, flag for future restore
@@ -1961,20 +1978,29 @@ export default function HomePage() {
                 onClear={() => setSelectedFeature([])}
                 searchPlaceholder="Search features"
                 onNavigateLeft={() => projectFilterRef.current?.open()}
-                onNavigateRight={() => statusFilterRef.current?.open()}
-              />
-              <FilterDropdown
-                ref={statusFilterRef}
-                label="Status"
-                data={statusOptions}
-                selectedValues={statusFilter}
-                onApply={setStatusFilter}
-                onClear={() => setStatusFilter([])}
-                searchPlaceholder="Search status"
-                onNavigateLeft={() => featureFilterRef.current?.open()}
-                onNavigateRight={() => userRole !== 'partner' && starredFilterRef.current?.open()}
+                onNavigateRight={() => {
+                  if (userRole === 'partner') {
+                    // Partners don't have status filter, so feature is rightmost
+                    return;
+                  }
+                  statusFilterRef.current?.open();
+                }}
                 isRightmost={userRole === 'partner'}
               />
+              {userRole !== 'partner' && (
+                <FilterDropdown
+                  ref={statusFilterRef}
+                  label="Status"
+                  data={statusOptions}
+                  selectedValues={statusFilter}
+                  onApply={setStatusFilter}
+                  onClear={() => setStatusFilter([])}
+                  searchPlaceholder="Search status"
+                  onNavigateLeft={() => featureFilterRef.current?.open()}
+                  onNavigateRight={() => starredFilterRef.current?.open()}
+                  isRightmost={false}
+                />
+              )}
               {userRole !== 'partner' && (
                 <FilterDropdown
                   ref={starredFilterRef}
@@ -2066,7 +2092,7 @@ export default function HomePage() {
                     onRemove={() => setSelectedFeature(selectedFeature.filter(f => f !== feature))}
                   />
                 ))}
-                {statusFilter.map((status) => {
+                {userRole !== 'partner' && statusFilter.map((status) => {
                   const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
                   return (
                     <FilterTag
