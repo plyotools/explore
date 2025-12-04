@@ -8,6 +8,8 @@ const FEATURES_PUBLIC_FILE = path.join(process.cwd(), 'public', 'data', 'feature
 const CLIENTS_FILE = path.join(process.cwd(), 'data', 'clients.json');
 const CLIENTS_PUBLIC_FILE = path.join(process.cwd(), 'public', 'data', 'clients.json');
 const INDEX_FILE = path.join(process.cwd(), 'public', 'instances.json');
+const FEATURED_INSTANCES_FILE = path.join(process.cwd(), 'data', 'featured-instances.json');
+const FEATURED_INSTANCES_PUBLIC_FILE = path.join(process.cwd(), 'public', 'data', 'featured-instances.json');
 
 // Calculate color lightness (0-1, where 0 is black and 1 is white)
 function getColorLightness(color: string): number {
@@ -56,6 +58,8 @@ async function ensureDirectories() {
   await fs.mkdir(path.dirname(FEATURES_PUBLIC_FILE), { recursive: true });
   await fs.mkdir(path.dirname(CLIENTS_FILE), { recursive: true });
   await fs.mkdir(path.dirname(CLIENTS_PUBLIC_FILE), { recursive: true });
+  await fs.mkdir(path.dirname(FEATURED_INSTANCES_FILE), { recursive: true });
+  await fs.mkdir(path.dirname(FEATURED_INSTANCES_PUBLIC_FILE), { recursive: true });
 }
 
 // Get project directory path
@@ -392,10 +396,38 @@ export async function getClients(): Promise<ClientConfig> {
 export async function updateClients(clients: ClientConfig): Promise<void> {
   await ensureDirectories();
   await fs.mkdir(path.dirname(CLIENTS_PUBLIC_FILE), { recursive: true });
+  
+  // Process all clients and convert data URIs to file paths
+  const processedClients: ClientConfig = {};
+  const clientsDir = path.join(process.cwd(), 'public', 'data', 'clients');
+  await fs.mkdir(clientsDir, { recursive: true });
+  
+  for (const [clientName, client] of Object.entries(clients)) {
+    processedClients[clientName] = { ...client };
+    
+    // If logo is a data URI, save it as a file
+    if (client.logo && client.logo.startsWith('data:')) {
+      try {
+        const base64Data = client.logo.split(',')[1];
+        const matches = client.logo.match(/data:image\/(\w+);base64/);
+        const extension = matches ? matches[1] : 'png';
+        const sanitizedName = clientName.replace(/[^a-zA-Z0-9]/g, '-');
+        const logoFileName = `${sanitizedName}.${extension}`;
+        const logoPath = path.join(clientsDir, logoFileName);
+        
+        await fs.writeFile(logoPath, base64Data, 'base64');
+        processedClients[clientName].logo = `/data/clients/${logoFileName}`;
+      } catch (error) {
+        console.error(`Failed to save logo for client ${clientName}:`, error);
+        // Keep original logo if saving fails
+      }
+    }
+  }
+  
   // Write to both locations
   await Promise.all([
-    fs.writeFile(CLIENTS_FILE, JSON.stringify(clients, null, 2), 'utf-8'),
-    fs.writeFile(CLIENTS_PUBLIC_FILE, JSON.stringify(clients, null, 2), 'utf-8'),
+    fs.writeFile(CLIENTS_FILE, JSON.stringify(processedClients, null, 2), 'utf-8'),
+    fs.writeFile(CLIENTS_PUBLIC_FILE, JSON.stringify(processedClients, null, 2), 'utf-8'),
   ]);
 }
 
@@ -436,4 +468,267 @@ export async function regenerateIndex(): Promise<void> {
     console.error('Error regenerating index:', error);
     throw error;
   }
+}
+
+// Get featured instances
+export async function getFeaturedInstances(): Promise<string[]> {
+  try {
+    await ensureDirectories();
+    try {
+      const content = await fs.readFile(FEATURED_INSTANCES_FILE, 'utf-8');
+      const data = JSON.parse(content);
+      return Array.isArray(data) ? data : [];
+    } catch {
+      // File doesn't exist yet, return empty array
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching featured instances:', error);
+    return [];
+  }
+}
+
+// Update featured instances
+export async function updateFeaturedInstances(instanceIds: string[]): Promise<void> {
+  await ensureDirectories();
+  // Ensure public/data directory exists
+  await fs.mkdir(path.dirname(FEATURED_INSTANCES_PUBLIC_FILE), { recursive: true });
+  // Write to both locations
+  await Promise.all([
+    fs.writeFile(FEATURED_INSTANCES_FILE, JSON.stringify(instanceIds, null, 2), 'utf-8'),
+    fs.writeFile(FEATURED_INSTANCES_PUBLIC_FILE, JSON.stringify(instanceIds, null, 2), 'utf-8'),
+  ]);
+}
+
+// Export types for backup
+export interface ExportData {
+  version: string;
+  exportDate: string;
+  projects: Array<{
+    metadata: ExploreInstance;
+    screenshot?: string; // base64 encoded
+  }>;
+  clients: ClientConfig;
+  clientLogos: Record<string, string>; // client name -> base64 encoded logo
+  features: FeatureConfig;
+  featuredInstances: string[];
+  colorPalette: string[];
+}
+
+// Export all data for backup
+export async function exportAllData(): Promise<ExportData> {
+  await ensureDirectories();
+  
+  const projects: ExportData['projects'] = [];
+  const clientLogos: Record<string, string> = {};
+  
+  // Export all projects with screenshots
+  try {
+    const entries = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const metadataPath = getMetadataPath(entry.name);
+        try {
+          const metadataContent = await fs.readFile(metadataPath, 'utf-8');
+          const metadata = JSON.parse(metadataContent) as ExploreInstance;
+          
+          // Try to read screenshot
+          let screenshotBase64: string | undefined;
+          const screenshotPath = path.join(getProjectDir(entry.name), 'screenshot');
+          const extensions = ['.png', '.jpg', '.jpeg', '.webp'];
+          for (const ext of extensions) {
+            try {
+              const fullPath = screenshotPath + ext;
+              await fs.access(fullPath);
+              const screenshotBuffer = await fs.readFile(fullPath);
+              const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
+              screenshotBase64 = `data:${mimeType};base64,${screenshotBuffer.toString('base64')}`;
+              break;
+            } catch {
+              // File doesn't exist, try next extension
+            }
+          }
+          
+          projects.push({
+            metadata,
+            screenshot: screenshotBase64,
+          });
+        } catch (error) {
+          console.error(`Error reading project ${entry.name}:`, error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error reading projects directory:', error);
+  }
+  
+  // Export clients
+  const clients = await getClients();
+  
+  // Export client logos as base64
+  const clientsDir = path.join(process.cwd(), 'public', 'data', 'clients');
+  try {
+    const logoFiles = await fs.readdir(clientsDir);
+    for (const logoFile of logoFiles) {
+      if (logoFile.match(/\.(png|jpg|jpeg|webp|svg)$/i)) {
+        try {
+          const logoPath = path.join(clientsDir, logoFile);
+          const logoBuffer = await fs.readFile(logoPath);
+          const extension = path.extname(logoFile).toLowerCase();
+          const mimeType = extension === '.png' ? 'image/png' : 
+                          extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : 
+                          extension === '.webp' ? 'image/webp' : 'image/svg+xml';
+          const base64Logo = `data:${mimeType};base64,${logoBuffer.toString('base64')}`;
+          
+          // Extract client name from filename (remove extension)
+          const clientName = logoFile.replace(/\.(png|jpg|jpeg|webp|svg)$/i, '');
+          clientLogos[clientName] = base64Logo;
+        } catch (error) {
+          console.error(`Error reading logo ${logoFile}:`, error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error reading clients directory:', error);
+  }
+  
+  // Export features
+  const features = await getFeatures();
+  
+  // Export featured instances
+  const featuredInstances = await getFeaturedInstances();
+  
+  // Export color palette
+  const PALETTE_FILE = path.join(process.cwd(), 'public', 'data', 'color-palette.json');
+  let colorPalette: string[] = [];
+  try {
+    const content = await fs.readFile(PALETTE_FILE, 'utf-8');
+    colorPalette = JSON.parse(content);
+  } catch {
+    // File doesn't exist, use empty array
+  }
+  
+  return {
+    version: '1.0',
+    exportDate: new Date().toISOString(),
+    projects,
+    clients,
+    clientLogos,
+    features,
+    featuredInstances,
+    colorPalette,
+  };
+}
+
+// Import all data from backup
+export async function importAllData(data: ExportData): Promise<void> {
+  await ensureDirectories();
+  
+  // 1. Delete all existing projects
+  try {
+    const entries = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        await fs.rm(path.join(PROJECTS_DIR, entry.name), { recursive: true, force: true });
+      }
+    }
+  } catch (error) {
+    console.error('Error deleting existing projects:', error);
+  }
+  
+  // 2. Import projects
+  for (const project of data.projects) {
+    const projectDir = getProjectDir(project.metadata.id);
+    await fs.mkdir(projectDir, { recursive: true });
+    
+    // Save metadata
+    const metadataPath = getMetadataPath(project.metadata.id);
+    await fs.writeFile(metadataPath, JSON.stringify(project.metadata, null, 2), 'utf-8');
+    
+    // Save screenshot if provided
+    if (project.screenshot && project.screenshot.startsWith('data:')) {
+      const base64Data = project.screenshot.split(',')[1];
+      const matches = project.screenshot.match(/data:image\/(\w+);base64/);
+      const extension = matches ? matches[1] : 'png';
+      const screenshotPath = path.join(projectDir, `screenshot.${extension}`);
+      await fs.writeFile(screenshotPath, base64Data, 'base64');
+    }
+  }
+  
+  // 3. Delete all existing client logos
+  const clientsDir = path.join(process.cwd(), 'public', 'data', 'clients');
+  try {
+    await fs.rm(clientsDir, { recursive: true, force: true });
+    await fs.mkdir(clientsDir, { recursive: true });
+  } catch (error) {
+    console.error('Error deleting existing client logos:', error);
+    await fs.mkdir(clientsDir, { recursive: true });
+  }
+  
+  // 4. Import client logos
+  for (const [clientName, logoData] of Object.entries(data.clientLogos)) {
+    if (logoData.startsWith('data:')) {
+      const base64Data = logoData.split(',')[1];
+      const matches = logoData.match(/data:image\/(\w+);base64/);
+      const extension = matches ? matches[1] : 'png';
+      const sanitizedName = clientName.replace(/[^a-zA-Z0-9]/g, '-');
+      const logoPath = path.join(clientsDir, `${sanitizedName}.${extension}`);
+      await fs.writeFile(logoPath, base64Data, 'base64');
+    }
+  }
+  
+  // 5. Import clients (updateClients will handle data URI conversion if any)
+  await updateClients(data.clients);
+  
+  // 6. Import features
+  await updateFeatures(data.features);
+  
+  // 7. Import featured instances
+  await updateFeaturedInstances(data.featuredInstances);
+  
+  // 8. Import color palette
+  const PALETTE_FILE = path.join(process.cwd(), 'public', 'data', 'color-palette.json');
+  await fs.mkdir(path.dirname(PALETTE_FILE), { recursive: true });
+  await fs.writeFile(PALETTE_FILE, JSON.stringify(data.colorPalette, null, 2), 'utf-8');
+  
+  // 9. Regenerate index
+  await regenerateIndex();
+}
+
+// Delete all data
+export async function deleteAllData(): Promise<void> {
+  await ensureDirectories();
+  
+  // Delete all projects
+  try {
+    await fs.rm(PROJECTS_DIR, { recursive: true, force: true });
+    await fs.mkdir(PROJECTS_DIR, { recursive: true });
+  } catch (error) {
+    console.error('Error deleting projects:', error);
+  }
+  
+  // Delete all client logos
+  const clientsDir = path.join(process.cwd(), 'public', 'data', 'clients');
+  try {
+    await fs.rm(clientsDir, { recursive: true, force: true });
+    await fs.mkdir(clientsDir, { recursive: true });
+  } catch (error) {
+    console.error('Error deleting client logos:', error);
+  }
+  
+  // Reset all config files
+  const emptyClients: ClientConfig = {};
+  const emptyFeatures: FeatureConfig = { 'Virtual Showroom': [], 'Apartment Chooser': [] };
+  const emptyPalette: string[] = [];
+  
+  await updateClients(emptyClients);
+  await updateFeatures(emptyFeatures);
+  await updateFeaturedInstances([]);
+  
+  const PALETTE_FILE = path.join(process.cwd(), 'public', 'data', 'color-palette.json');
+  await fs.mkdir(path.dirname(PALETTE_FILE), { recursive: true });
+  await fs.writeFile(PALETTE_FILE, JSON.stringify(emptyPalette, null, 2), 'utf-8');
+  
+  // Regenerate empty index
+  await regenerateIndex();
 }

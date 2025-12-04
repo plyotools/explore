@@ -34,7 +34,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Clients data required' }, { status: 400 });
     }
     
-    // Handle logo saving if provided
+    // Handle logo saving if provided (for newly added client)
     if (clientLogo && clientLogo.clientName && clientLogo.logoData) {
       const logoPath = await saveClientLogo(clientLogo.clientName, clientLogo.logoData);
       // Update the client's logo path
@@ -43,6 +43,8 @@ export async function PUT(request: NextRequest) {
       }
     }
     
+    // updateClients will automatically process all data URIs in the clients object
+    // and convert them to file paths before saving
     await updateClients(clients);
     return NextResponse.json({ success: true });
   } catch (error) {

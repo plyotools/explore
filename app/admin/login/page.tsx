@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Container, Paper, Title, TextInput, PasswordInput, Button, Alert } from '@mantine/core';
+import { Box, Container, Paper, Title, TextInput, PasswordInput, Button, Alert } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 
 function getBasePath(): string {
@@ -46,10 +46,10 @@ export default function LoginPage() {
   };
 
   return (
-    <Container size={420} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
-      <Paper withBorder shadow="md" p={30} radius="md" style={{ width: '100%' }}>
+    <Box style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <Paper withBorder shadow="md" p={30} radius="md" style={{ width: '100%', maxWidth: '420px' }}>
         <Title order={2} ta="center" mb="md">
-          Admin Login
+          Login
         </Title>
 
         {error && (
@@ -61,7 +61,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <PasswordInput
             label="Password"
-            placeholder="Enter admin password"
+            placeholder="Enter password to access the showcase"
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
             required
@@ -72,7 +72,7 @@ export default function LoginPage() {
           </Button>
         </form>
       </Paper>
-    </Container>
+    </Box>
   );
 }
 

@@ -9,6 +9,11 @@
       "name": "Styles",
       "color": "#5BBBDD",
       "icon": "IconActivityHeartbeat"
+    },
+    {
+      "name": "Hotspots",
+      "color": "#B5F2FF",
+      "icon": "IconLabelFilled"
     }
   ],
   "Apartment Chooser": [

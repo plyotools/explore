@@ -161,7 +161,9 @@
     "name": "Tonningskamben",
     "link": "http://kambenstryn.no/",
     "type": "Apartment Chooser",
-    "features": [],
+    "features": [
+      "Sun Path"
+    ],
     "description": "",
     "createdAt": "2025-12-03T10:13:16.956Z",
     "active": true,
