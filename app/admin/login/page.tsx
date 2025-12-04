@@ -46,34 +46,38 @@ export default function LoginPage() {
   };
 
   return (
-    <Box 
-      style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        minHeight: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        padding: '16px',
-        margin: 0,
-        width: '100vw',
-        boxSizing: 'border-box',
-      }}
-    >
-      <Paper 
-        withBorder 
-        shadow="md" 
-        p={30} 
-        radius="md" 
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        body {
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow-x: hidden;
+        }
+      `}} />
+      <Box 
         style={{ 
-          width: '100%', 
-          maxWidth: '420px',
+          minHeight: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          padding: '16px',
           margin: 0,
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
+        <Paper 
+          withBorder 
+          shadow="md" 
+          p={30} 
+          radius="md" 
+          style={{ 
+            width: '100%', 
+            maxWidth: '420px',
+            margin: 0,
+          }}
+        >
         <Title order={2} ta="center" mb="md">
           Login
         </Title>
@@ -97,8 +101,9 @@ export default function LoginPage() {
             Login
           </Button>
         </form>
-      </Paper>
-    </Box>
+        </Paper>
+      </Box>
+    </>
   );
 }
 
