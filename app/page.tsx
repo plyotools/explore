@@ -326,13 +326,14 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
                   handleKeyDown(e);
                 }
               }}
-              leftSection={<IconSearch size={16} />}
+              leftSection={<IconSearch size={16} color="#8027F4" />}
               size="sm"
               styles={{
                 input: {
-                  border: 'none',
-                  backgroundColor: 'white',
+                  border: '1px solid #D0D1D5',
+                  backgroundColor: '#FFFFFF',
                   color: '#1A1B1E',
+                  boxShadow: 'none',
                 }
               }}
             />
@@ -485,7 +486,7 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
             </Stack>
           </ScrollArea>
           <Box p="md" style={{ borderTop: '1px solid rgba(0, 0, 0, 0.1)', backgroundColor: 'white' }}>
-            <Group justify="space-between" mb="sm">
+            <Group justify="flex-end" gap="md">
               <Text size="sm" c="dimmed">
                 Selected: {pendingValues.length}
               </Text>
@@ -499,8 +500,6 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
                   Clear selected
                 </Button>
               )}
-            </Group>
-            <Group justify="flex-end">
               <Button
                 onClick={handleClose}
                 size="sm"
@@ -1718,6 +1717,7 @@ export default function HomePage() {
               isRightmost={true}
             />
           )}
+              {/* Grouping feature commented out
               <Select
                 placeholder="Group by..."
                 data={[
@@ -1755,6 +1755,7 @@ export default function HomePage() {
                   styles={filterDropdownStyles}
                 />
               )}
+              */}
             </Group>
             {/* Filter Tags Row */}
             {(typeFilter.length > 0 || clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
@@ -1895,10 +1896,13 @@ export default function HomePage() {
                       padding={0} 
                       radius="md" 
                       h="100%"
-                      component="a"
-                      href={instance.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      component="div"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (instance.link) {
+                          window.open(instance.link, '_blank');
+                        }
+                      }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                         e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -1947,8 +1951,8 @@ export default function HomePage() {
                                 top: 8,
                                 right: 8,
                                 zIndex: 10,
-                                backgroundColor: featuredInstances.has(instance.id) ? '#FFD700' : 'rgba(0, 0, 0, 0.5)',
-                                color: featuredInstances.has(instance.id) ? '#FFFFFF' : undefined,
+                                backgroundColor: featuredInstances.has(instance.id) ? '#000000' : 'rgba(0, 0, 0, 0.5)',
+                                color: featuredInstances.has(instance.id) ? '#FFB800' : undefined,
                               }}
                               onClick={(e) => {
                                 e.preventDefault();
@@ -1956,7 +1960,7 @@ export default function HomePage() {
                                 toggleFeatured(instance.id);
                               }}
                             >
-                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} style={{ color: '#FFFFFF' }} /> : <IconStar size={16} />}
+                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} style={{ color: '#FFB800' }} /> : <IconStar size={16} />}
                             </ActionIcon>
                           )}
                           {instance.features.length > 0 && (
@@ -2198,10 +2202,13 @@ export default function HomePage() {
                                 padding={0} 
                                 radius="md" 
                                 h="100%"
-                                component="a"
-                                href={instance.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                component="div"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (instance.link) {
+                                    window.open(instance.link, '_blank');
+                                  }
+                                }}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                                   e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -2249,7 +2256,8 @@ export default function HomePage() {
                                           top: 8,
                                           right: 8,
                                           zIndex: 10,
-                                          backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                                          backgroundColor: featuredInstances.has(instance.id) ? '#000000' : 'rgba(0, 0, 0, 0.5)',
+                                          color: featuredInstances.has(instance.id) ? '#FFB800' : undefined,
                                         }}
                                         onClick={(e) => {
                                           e.preventDefault();
@@ -2257,7 +2265,7 @@ export default function HomePage() {
                                           toggleFeatured(instance.id);
                                         }}
                                       >
-                                        {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                                        {featuredInstances.has(instance.id) ? <IconStarFilled size={16} style={{ color: '#FFB800' }} /> : <IconStar size={16} />}
                                       </ActionIcon>
                                     )}
                                     {instance.features.length > 0 && (
