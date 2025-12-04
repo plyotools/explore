@@ -784,14 +784,43 @@ export default function HomePage() {
       }
       
       if (response.ok) {
-        const data = await response.json();
-        setFeaturedInstances(new Set(Array.isArray(data) ? data : []));
+        const contentType = response.headers.get('content-type');
+        const isJson = contentType && contentType.includes('application/json');
+        
+        if (isJson) {
+          const data = await response.json();
+          setFeaturedInstances(new Set(Array.isArray(data) ? data : []));
+        } else {
+          // Response is not JSON (likely HTML error page), try localStorage
+          loadFeaturedInstancesFromLocalStorage();
+        }
       } else {
-        // If both fail, use empty set
-        setFeaturedInstances(new Set());
+        // If API and file fail, try localStorage
+        loadFeaturedInstancesFromLocalStorage();
       }
     } catch (error) {
       console.error('Error loading featured instances:', error);
+      // On error, try localStorage as fallback
+      loadFeaturedInstancesFromLocalStorage();
+    }
+  };
+
+  // Load featured instances from localStorage (for static exports)
+  const loadFeaturedInstancesFromLocalStorage = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = window.localStorage.getItem('explore_featured_instances');
+        if (stored) {
+          const data = JSON.parse(stored);
+          setFeaturedInstances(new Set(Array.isArray(data) ? data : []));
+        } else {
+          setFeaturedInstances(new Set());
+        }
+      } catch (error) {
+        console.error('Error loading featured instances from localStorage:', error);
+        setFeaturedInstances(new Set());
+      }
+    } else {
       setFeaturedInstances(new Set());
     }
   };
@@ -811,16 +840,55 @@ export default function HomePage() {
         body: JSON.stringify({ instanceIds: Array.from(featured) }),
       });
       
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+      
       if (response.ok) {
         setFeaturedInstances(featured);
+        // Also save to localStorage as backup for static exports
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('explore_featured_instances', JSON.stringify(Array.from(featured)));
+        }
       } else {
-        const error = await response.json();
-        console.error('Failed to save featured instances:', error);
-        alert(`Failed to save featured instances: ${error.error || 'Unknown error'}`);
+        // If API doesn't exist (static export), fall back to localStorage only
+        if (!isJson || response.status === 404) {
+          // Static export - save to localStorage only
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('explore_featured_instances', JSON.stringify(Array.from(featured)));
+            setFeaturedInstances(featured);
+          }
+          return;
+        }
+        
+        // Try to parse error, but handle non-JSON responses gracefully
+        let errorMessage = 'Unknown error';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch {
+          // Response is not JSON, use status text
+          errorMessage = response.statusText || `HTTP ${response.status}`;
+        }
+        console.error('Failed to save featured instances:', errorMessage);
+        alert(`Failed to save featured instances: ${errorMessage}`);
       }
     } catch (error) {
+      // For static exports, API will fail - fall back to localStorage
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        // Network error or API doesn't exist - use localStorage
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('explore_featured_instances', JSON.stringify(Array.from(featured)));
+          setFeaturedInstances(featured);
+        }
+        return;
+      }
+      
       console.error('Error saving featured instances:', error);
-      alert(`Failed to save featured instances: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Only show alert for unexpected errors, not for expected static export failures
+      if (error instanceof Error && !error.message.includes('JSON')) {
+        alert(`Failed to save featured instances: ${error.message}`);
+      }
     }
   };
 
