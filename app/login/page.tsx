@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Container, Paper, Title, PasswordInput, Button, Alert, Text } from '@mantine/core';
+import { Paper, Title, PasswordInput, Button, Alert, Text } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 
 // Simple client-side password check used when API routes are not available
@@ -141,14 +141,11 @@ export default function LoginPage() {
       padding: '0',
       backgroundColor: '#0A082D'
     }}>
-      <Container 
-        size={420} 
-        style={{ 
-          width: '420px',
-          maxWidth: '420px',
-          minWidth: '420px'
-        }}
-      >
+      <div style={{ 
+        width: '420px',
+        maxWidth: '420px',
+        minWidth: '420px'
+      }}>
         <Paper 
           withBorder 
           shadow="md" 
@@ -210,7 +207,7 @@ export default function LoginPage() {
             </Button>
           </form>
         </Paper>
-      </Container>
+      </div>
     </div>
   );
 }
