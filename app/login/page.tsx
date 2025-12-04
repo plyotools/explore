@@ -138,7 +138,7 @@ export default function LoginPage() {
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'center',
-      padding: '20px',
+      padding: '0',
       backgroundColor: '#0A082D'
     }}>
       <Container 
