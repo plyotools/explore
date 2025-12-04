@@ -141,7 +141,14 @@ export default function LoginPage() {
       padding: '20px',
       backgroundColor: '#0A082D'
     }}>
-      <Container size={420} style={{ width: '100%', maxWidth: '420px' }}>
+      <Container 
+        size={420} 
+        style={{ 
+          width: '420px',
+          maxWidth: '420px',
+          minWidth: '420px'
+        }}
+      >
         <Paper 
           withBorder 
           shadow="md" 
