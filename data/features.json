@@ -24,8 +24,8 @@
     },
     {
       "name": "Sun Path",
-      "color": "#FFCC7F",
-      "icon": "IconSun"
+      "color": "#FFF5D9",
+      "icon": "IconSunFilled"
     }
   ]
 }
