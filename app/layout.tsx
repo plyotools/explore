@@ -195,6 +195,16 @@ export default function RootLayout({
             color: #F0F2F9 !important;
             background-color: #2A275D !important;
           }
+          /* Starred projects - white star on yellow background */
+          [data-mantine-color-scheme="dark"] .mantine-ActionIcon-root[data-starred="true"] {
+            color: #FFFFFF !important;
+            background-color: #FFD700 !important;
+          }
+          [data-mantine-color-scheme="dark"] .mantine-ActionIcon-root[data-starred="true"] svg {
+            color: #FFFFFF !important;
+            fill: #FFFFFF !important;
+            stroke: #FFFFFF !important;
+          }
           /* Select dropdowns - light/positive background */
           [data-mantine-color-scheme="dark"] .mantine-Select-dropdown {
             background-color: #E0E4EB !important;

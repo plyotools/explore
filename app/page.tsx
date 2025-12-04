@@ -48,7 +48,7 @@ const pulseKeyframes = `
     border: none !important;
   }
 `;
-import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck, IconDotsVertical, IconDownload, IconUpload, IconDatabaseOff } from '@tabler/icons-react';
+import { IconLogin, IconLogout, IconEdit, IconPlus, IconPhoto, IconSettings, IconX, IconArrowUp, IconArrowDown, IconGripVertical, IconPalette, IconSearch, IconBuilding, IconStar, IconStarFilled, IconClipboard, IconTrash, IconCheck, IconDotsVertical } from '@tabler/icons-react';
 import { ExploreInstance, InstanceType, FeatureConfig, FeatureWithColor, ClientConfig, Client } from './lib/types';
 
 // Icon Picker Component
@@ -183,15 +183,6 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
       item.value.toLowerCase().includes(searchLower)
     );
   }, [data, searchTerm]);
-
-  // Clamp highlighted index when filtered data changes (but don't reset if user is navigating)
-  useEffect(() => {
-    if (filteredData.length === 0) {
-      setHighlightedIndex(0);
-    } else if (highlightedIndex >= filteredData.length) {
-      setHighlightedIndex(filteredData.length - 1);
-    }
-  }, [filteredData.length, highlightedIndex]);
 
   const handleToggle = (value: string) => {
     const newValues = pendingValues.includes(value) 
@@ -340,6 +331,8 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
               styles={{
                 input: {
                   border: 'none',
+                  backgroundColor: 'white',
+                  color: '#1A1B1E',
                 }
               }}
             />
@@ -418,18 +411,29 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
                           }}
                         />
                         {isSelected && (
-                          <>
+                          <Box
+                            style={{
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              border: '2px solid #8027F4',
+                              borderRadius: '50%',
+                              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                              zIndex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
                             <Box
                               style={{
-                                position: 'absolute',
-                                width: '100%',
-                                height: '100%',
+                                width: 10,
+                                height: 10,
+                                borderRadius: '50%',
                                 backgroundColor: '#8027F4',
-                                zIndex: 1,
                               }}
                             />
-                            <IconCheck size={12} style={{ color: 'white', position: 'absolute', zIndex: 2 }} />
-                          </>
+                          </Box>
                         )}
                       </Box>
                     ) : (
@@ -438,7 +442,8 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
                           width: 20,
                           height: 20,
                           borderRadius: '50%',
-                          backgroundColor: '#8027F4',
+                          backgroundColor: 'white',
+                          border: isSelected ? '2px solid #8027F4' : '2px solid transparent',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -446,7 +451,14 @@ const FilterDropdown = forwardRef<FilterDropdownRef, {
                         }}
                       >
                         {isSelected && (
-                          <IconCheck size={12} style={{ color: 'white' }} />
+                          <Box
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              backgroundColor: '#8027F4',
+                            }}
+                          />
                         )}
                       </Box>
                     )}
@@ -542,30 +554,6 @@ function FilterTag({
 // Placeholder image path for projects without screenshots
 const PLACEHOLDER_IMAGE = '/placeholder.png';
 
-// Helper function to normalize logo paths for basePath (GitHub Pages)
-function normalizeLogoPath(logo: string | undefined, basePath: string): string | undefined {
-  if (!logo) return undefined;
-  
-  // Don't modify data URIs or external URLs
-  if (logo.startsWith('data:') || logo.startsWith('http')) {
-    return logo;
-  }
-  
-  // If logo already includes basePath, return as-is
-  if (basePath && logo.startsWith(basePath)) {
-    return logo;
-  }
-  
-  // If logo starts with absolute path like /data/clients/..., add basePath prefix
-  // Only if basePath is set (not empty)
-  if (logo.startsWith('/') && basePath && basePath !== '') {
-    return `${basePath}${logo}`;
-  }
-  
-  // Otherwise return as-is
-  return logo;
-}
-
 export default function HomePage() {
   const router = useRouter();
   const [instances, setInstances] = useState<ExploreInstance[]>([]);
@@ -585,9 +573,8 @@ export default function HomePage() {
   const statusFilterRef = useRef<FilterDropdownRef>(null);
   const starredFilterRef = useRef<FilterDropdownRef>(null);
   const [featuredInstances, setFeaturedInstances] = useState<Set<string>>(new Set());
-  // TODO: RESTORE GROUPING FEATURE - Commented out for now, flag for future restore
-  // const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
-  // const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
+  const [groupBy1, setGroupBy1] = useState<'none' | 'client' | 'status' | 'feature'>('none');
+  const [groupBy2, setGroupBy2] = useState<'none' | 'client' | 'status' | 'feature'>('none');
   const [authenticated, setAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userRole, setUserRole] = useState<'viewer' | 'admin' | 'partner'>('viewer');
@@ -633,9 +620,6 @@ export default function HomePage() {
   const [mergeModalOpened, setMergeModalOpened] = useState(false);
   const [clientToRemove, setClientToRemove] = useState<string | null>(null);
   const [mergeTargetClient, setMergeTargetClient] = useState<string | null>(null);
-  const [importModalOpened, setImportModalOpened] = useState(false);
-  const [deleteAllModalOpened, setDeleteAllModalOpened] = useState(false);
-  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState('');
 
   // Shared styles for filter dropdowns (text-link style)
   const filterDropdownStyles = {
@@ -758,154 +742,45 @@ export default function HomePage() {
   const isColorDark = useCallback((color: string): boolean => {
     if (!color) return false;
     const lightness = getColorLightness(color);
-    // Threshold: values below 0.5 are dark (use white text), above are light (use dark text)
-    // Using 0.5 for balanced detection
-    return lightness < 0.5;
+    // Lower threshold to ensure bright colors get dark text
+    return lightness < 0.45;
   }, [getColorLightness]);
 
-  // Load featured instances from server (or public file for static export)
-  const loadFeaturedInstances = async () => {
-    try {
-      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-      
-      // Try API first
-      let response = await fetch(`${basePath}/api/featured-instances`, { cache: 'no-store' });
-      
-      // If API fails, try public file (for static export)
-      if (!response.ok && basePath) {
-        try {
-          response = await fetch(`${basePath}/data/featured-instances.json`, { cache: 'no-store' });
-        } catch {
-          // Try without basePath
-          response = await fetch('/data/featured-instances.json', { cache: 'no-store' });
-        }
-      } else if (!response.ok) {
-        response = await fetch('/data/featured-instances.json', { cache: 'no-store' });
-      }
-      
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        const isJson = contentType && contentType.includes('application/json');
-        
-        if (isJson) {
-          const data = await response.json();
-          setFeaturedInstances(new Set(Array.isArray(data) ? data : []));
-        } else {
-          // Response is not JSON (likely HTML error page), try localStorage
-          loadFeaturedInstancesFromLocalStorage();
-        }
-      } else {
-        // If API and file fail, try localStorage
-        loadFeaturedInstancesFromLocalStorage();
-      }
-    } catch (error) {
-      console.error('Error loading featured instances:', error);
-      // On error, try localStorage as fallback
-      loadFeaturedInstancesFromLocalStorage();
-    }
-  };
-
-  // Load featured instances from localStorage (for static exports)
-  const loadFeaturedInstancesFromLocalStorage = () => {
+  // Load featured instances from localStorage
+  const loadFeaturedInstances = () => {
     if (typeof window !== 'undefined') {
       try {
-        const stored = window.localStorage.getItem('explore_featured_instances');
+        const stored = localStorage.getItem('featuredInstances');
         if (stored) {
-          const data = JSON.parse(stored);
-          setFeaturedInstances(new Set(Array.isArray(data) ? data : []));
-        } else {
-          setFeaturedInstances(new Set());
+          setFeaturedInstances(new Set(JSON.parse(stored)));
         }
       } catch (error) {
-        console.error('Error loading featured instances from localStorage:', error);
-        setFeaturedInstances(new Set());
+        console.error('Error loading featured instances:', error);
       }
-    } else {
-      setFeaturedInstances(new Set());
     }
   };
 
-  // Save featured instances to server (only for admins/viewers)
-  const saveFeaturedInstances = async (featured: Set<string>) => {
-    // Only allow admins and viewers to save
-    if (userRole === 'partner') {
-      return;
-    }
-    
-    try {
-      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-      const response = await fetch(`${basePath}/api/featured-instances`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceIds: Array.from(featured) }),
-      });
-      
-      // Check if response is JSON before parsing
-      const contentType = response.headers.get('content-type');
-      const isJson = contentType && contentType.includes('application/json');
-      
-      if (response.ok) {
+  // Save featured instances to localStorage
+  const saveFeaturedInstances = (featured: Set<string>) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('featuredInstances', JSON.stringify(Array.from(featured)));
         setFeaturedInstances(featured);
-        // Also save to localStorage as backup for static exports
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('explore_featured_instances', JSON.stringify(Array.from(featured)));
-        }
-      } else {
-        // If API doesn't exist (static export), fall back to localStorage only
-        if (!isJson || response.status === 404) {
-          // Static export - save to localStorage only
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem('explore_featured_instances', JSON.stringify(Array.from(featured)));
-            setFeaturedInstances(featured);
-          }
-          return;
-        }
-        
-        // Try to parse error, but handle non-JSON responses gracefully
-        let errorMessage = 'Unknown error';
-        try {
-          const error = await response.json();
-          errorMessage = error.error || errorMessage;
-        } catch {
-          // Response is not JSON, use status text
-          errorMessage = response.statusText || `HTTP ${response.status}`;
-        }
-        console.error('Failed to save featured instances:', errorMessage);
-        alert(`Failed to save featured instances: ${errorMessage}`);
-      }
-    } catch (error) {
-      // For static exports, API will fail - fall back to localStorage
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        // Network error or API doesn't exist - use localStorage
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('explore_featured_instances', JSON.stringify(Array.from(featured)));
-          setFeaturedInstances(featured);
-        }
-        return;
-      }
-      
-      console.error('Error saving featured instances:', error);
-      // Only show alert for unexpected errors, not for expected static export failures
-      if (error instanceof Error && !error.message.includes('JSON')) {
-        alert(`Failed to save featured instances: ${error.message}`);
+      } catch (error) {
+        console.error('Error saving featured instances:', error);
       }
     }
   };
 
   // Toggle featured status for an instance
-  const toggleFeatured = async (instanceId: string) => {
-    // Only allow admins and viewers to toggle
-    if (userRole === 'partner') {
-      return;
-    }
-    
+  const toggleFeatured = (instanceId: string) => {
     const newFeatured = new Set(featuredInstances);
     if (newFeatured.has(instanceId)) {
       newFeatured.delete(instanceId);
     } else {
       newFeatured.add(instanceId);
     }
-    await saveFeaturedInstances(newFeatured);
+    saveFeaturedInstances(newFeatured);
   };
 
   useEffect(() => {
@@ -916,8 +791,77 @@ export default function HomePage() {
       checkAuth(),
       loadColorPalette(),
       loadClients(),
-      loadFeaturedInstances(),
     ]).catch(console.error);
+    loadFeaturedInstances();
+    
+    // Keyboard shortcuts
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Only trigger if not typing in an input, textarea, or contenteditable element
+      const target = e.target as HTMLElement;
+      const isInputElement = target.tagName === 'INPUT' || 
+                             target.tagName === 'TEXTAREA' || 
+                             target.isContentEditable ||
+                             target.closest('input') ||
+                             target.closest('textarea');
+      
+      if (isInputElement || e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+      
+      // 'f' key opens first filter
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        typeFilterRef.current?.open();
+      }
+      
+      // 'c' key clears all filters
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        setTypeFilter([]);
+        setClientFilter([]);
+        setProjectFilter([]);
+        setSelectedFeature([]);
+        setStatusFilter([]);
+        setFeaturedFilter([]);
+      }
+      
+      // 'o' key opens all visible projects in new tabs
+      if (e.key === 'o' || e.key === 'O') {
+        e.preventDefault();
+        // Get all instances in display order (from groupedInstances)
+        const instancesInOrder: ExploreInstance[] = [];
+        const sortedGroupKeys = Object.keys(groupedInstances).sort((a, b) => {
+          if (groupBy1 === 'status') {
+            if (a.includes('Active') && b.includes('Inactive')) return -1;
+            if (a.includes('Inactive') && b.includes('Active')) return 1;
+          }
+          if (groupBy1 === 'client') {
+            if (a === '' && b !== '') return -1;
+            if (a !== '' && b === '') return 1;
+          }
+          return a.localeCompare(b);
+        });
+        
+        for (const key of sortedGroupKeys) {
+          instancesInOrder.push(...groupedInstances[key]);
+        }
+        
+        // Open each instance link in a new tab with a small delay to avoid browser blocking
+        instancesInOrder.forEach((instance, index) => {
+          if (instance.link) {
+            setTimeout(() => {
+              window.open(instance.link, '_blank');
+            }, index * 100); // 100ms delay between each tab
+          }
+        });
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadColorPalette = async () => {
@@ -1085,13 +1029,6 @@ export default function HomePage() {
     // Instead, rely on a simple client-side session stored in localStorage.
     if (typeof window !== 'undefined') {
       const basePath = window.location.pathname.startsWith('/explore') ? '/explore' : '';
-      const currentPath = window.location.pathname;
-
-      // Don't check auth if we're already on the login page
-      if (currentPath.includes('/login')) {
-        setCheckingAuth(false);
-        return;
-      }
 
       if (process.env.NODE_ENV === 'production') {
         const session = window.localStorage.getItem('explore_session');
@@ -1107,10 +1044,7 @@ export default function HomePage() {
         }
 
         // Not authenticated in production static export – send to login under correct base path
-        // Only redirect if we're not already going to login
-        if (!currentPath.includes('/login')) {
-          window.location.replace(`${basePath}/login`);
-        }
+        window.location.replace(`${basePath}/login`);
         return;
       }
     }
@@ -1134,13 +1068,11 @@ export default function HomePage() {
         setCheckingAuth(false);
       } else {
         // Not authenticated, redirect immediately
-        const basePath = typeof window !== 'undefined' ? (window.location.pathname.startsWith('/explore') ? '/explore' : '') : '';
-        window.location.replace(`${basePath}/login`);
+        window.location.replace('/login');
       }
     } catch (error) {
       // On error or timeout, redirect immediately
-      const basePath = typeof window !== 'undefined' ? (window.location.pathname.startsWith('/explore') ? '/explore' : '') : '';
-      window.location.replace(`${basePath}/login`);
+      window.location.replace('/login');
     }
   };
 
@@ -1201,25 +1133,9 @@ export default function HomePage() {
   };
 
   const handleLogout = async () => {
-    // Clear server-side session if in development
-    if (process.env.NODE_ENV !== 'production') {
-      try {
-        await fetch('/api/auth/', { method: 'DELETE' });
-      } catch (e) {
-        // Ignore errors in production/static mode
-      }
-    }
-    
-    // Clear client-side session (works in both dev and production)
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('explore_session');
-      window.localStorage.removeItem('explore_user_role');
-      window.localStorage.removeItem('explore_is_admin');
-    }
-    
+    await fetch('/api/auth/', { method: 'DELETE' });
     setAuthenticated(false);
     setIsAdmin(false);
-    
     if (typeof window !== 'undefined') {
       // Determine basePath - check if we're on GitHub Pages
       const hostname = window.location.hostname;
@@ -1233,8 +1149,7 @@ export default function HomePage() {
         basePath = '/explore';
       }
       
-      // Force a full page reload to clear state
-      window.location.href = `${basePath}/login`;
+      window.location.replace(`${basePath}/login`);
     }
   };
 
@@ -1353,21 +1268,8 @@ export default function HomePage() {
 
   const loadInstances = async () => {
     try {
-      // Determine basePath - check if we're on GitHub Pages
-      let currentBasePath = '';
-      if (typeof window !== 'undefined') {
-        const hostname = window.location.hostname;
-        const pathname = window.location.pathname;
-        
-        // If on GitHub Pages (plyotools.github.io), always use /explore
-        if (hostname === 'plyotools.github.io') {
-          currentBasePath = '/explore';
-        } else if (pathname.startsWith('/explore')) {
-          currentBasePath = '/explore';
-        } else {
-          currentBasePath = pathname.replace(/\/$/, '');
-        }
-      }
+      // Use relative path that works with basePath
+      const currentBasePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
       setBasePath(currentBasePath);
       // Remove cache-busting for better performance - use cache headers instead
       // Ensure we have a leading slash
@@ -1470,137 +1372,37 @@ export default function HomePage() {
     });
   }, [instances, typeFilter, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
 
-  // Check if there are any featured instances (for partner role filter visibility)
-  const hasFeaturedInstances = useMemo(() => {
-    return featuredInstances.size > 0;
-  }, [featuredInstances]);
-
-  // For partners, only show filters if there are featured instances
-  const shouldShowFilters = userRole !== 'partner' || hasFeaturedInstances;
-
   const clientOptions = useMemo(() => {
     const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-    
-    // Filter instances excluding the clientFilter to get base filtered set
-    const baseFiltered = instances.filter((instance) => {
-      // Partner role: only show starred instances
-      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
-      
-      if (typeFilter.length > 0 && !typeFilter.includes(instance.type)) return false;
-      if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
-      if (statusFilter.length > 0) {
-        const statusMatch = statusFilter.some(status => {
-          if (status === 'active') return instance.active !== false;
-          if (status === 'inactive') return instance.active === false;
-          return false;
-        });
-        if (!statusMatch) return false;
-      }
-      if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
-      if (featuredFilter.length > 0) {
-        const featuredMatch = featuredFilter.some(f => {
-          if (f === 'featured') return featuredInstances.has(instance.id);
-          if (f === 'not-featured') return !featuredInstances.has(instance.id);
-          return false;
-        });
-        if (!featuredMatch) return false;
-      }
-      return true;
-    });
-
     const clientNames = Array.from(
       new Set(
-        baseFiltered
+        instances
           .map((i) => (i.client || '').trim())
           .filter((c) => c.length > 0)
       )
     ).sort((a, b) => a.localeCompare(b));
-    
     return clientNames.map((c) => {
       const clientLogo = clients[c]?.logo;
-      const logoPath = normalizeLogoPath(clientLogo, basePath);
-      const count = baseFiltered.filter(i => (i.client || '').trim() === c).length;
-      return { value: c, label: `${c} (${count})`, image: logoPath };
+      const logoPath = clientLogo 
+        ? (basePath && !clientLogo.startsWith(basePath) && !clientLogo.startsWith('http') && !clientLogo.startsWith('data:') 
+            ? `${basePath}${clientLogo}` 
+            : clientLogo)
+        : undefined;
+      return { value: c, label: c, image: logoPath };
     });
-  }, [instances, clients, typeFilter, selectedFeature, statusFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
+  }, [instances, clients]);
 
   const projectOptions = useMemo(() => {
-    // Filter instances based on role and other filters (excluding projectFilter)
-    const baseFiltered = instances.filter((instance) => {
-      // Partner role: only show starred instances
-      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
-      
-      if (typeFilter.length > 0 && !typeFilter.includes(instance.type)) return false;
-      if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
-      if (statusFilter.length > 0) {
-        const statusMatch = statusFilter.some(status => {
-          if (status === 'active') return instance.active !== false;
-          if (status === 'inactive') return instance.active === false;
-          return false;
-        });
-        if (!statusMatch) return false;
-      }
-      if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
-      if (featuredFilter.length > 0) {
-        const featuredMatch = featuredFilter.some(f => {
-          if (f === 'featured') return featuredInstances.has(instance.id);
-          if (f === 'not-featured') return !featuredInstances.has(instance.id);
-          return false;
-        });
-        if (!featuredMatch) return false;
-      }
-      return true;
-    });
-    
     const uniqueProjects = Array.from(
-      new Set(baseFiltered.map((i) => i.name))
+      new Set(instances.map((i) => i.name))
     ).sort((a, b) => a.localeCompare(b));
-    
-    return uniqueProjects.map((name) => {
-      const count = baseFiltered.filter(i => i.name === name).length;
-      return { value: name, label: count > 1 ? `${name} (${count})` : name };
-    });
-  }, [instances, userRole, featuredInstances, typeFilter, selectedFeature, statusFilter, clientFilter, featuredFilter]);
+    return uniqueProjects.map((name) => ({ value: name, label: name }));
+  }, [instances]);
 
-  // Compute counts for type options (excluding typeFilter from the count logic)
-  const typeOptionsWithCounts = useMemo(() => {
-    // Filter instances excluding the typeFilter to get base filtered set
-    const baseFiltered = instances.filter((instance) => {
-      // Partner role: only show starred instances
-      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
-      
-      if (selectedFeature.length > 0 && !selectedFeature.some(f => instance.features.includes(f))) return false;
-      if (statusFilter.length > 0) {
-        const statusMatch = statusFilter.some(status => {
-          if (status === 'active') return instance.active !== false;
-          if (status === 'inactive') return instance.active === false;
-          return false;
-        });
-        if (!statusMatch) return false;
-      }
-      if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
-      if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
-      if (featuredFilter.length > 0) {
-        const featuredMatch = featuredFilter.some(f => {
-          if (f === 'featured') return featuredInstances.has(instance.id);
-          if (f === 'not-featured') return !featuredInstances.has(instance.id);
-          return false;
-        });
-        if (!featuredMatch) return false;
-      }
-      return true;
-    });
-
-    const apartmentChooserCount = baseFiltered.filter(i => i.type === 'Apartment Chooser').length;
-    const virtualShowroomCount = baseFiltered.filter(i => i.type === 'Virtual Showroom').length;
-
-    return [
-      { value: 'Apartment Chooser', label: `Apartment Chooser (${apartmentChooserCount})` },
-      { value: 'Virtual Showroom', label: `Virtual Showroom (${virtualShowroomCount})` },
-    ];
-  }, [instances, selectedFeature, statusFilter, clientFilter, projectFilter, featuredFilter, featuredInstances, userRole]);
-
-  const typeOptions = typeOptionsWithCounts;
+  const typeOptions = useMemo(() => [
+    { value: 'Apartment Chooser', label: 'Apartment Chooser' },
+    { value: 'Virtual Showroom', label: 'Virtual Showroom' },
+  ], []);
 
   const statusOptions = useMemo(() => [
     { value: 'active', label: 'Active' },
@@ -1616,198 +1418,94 @@ export default function HomePage() {
     new Set(instances.flatMap((i) => i.features))
   ).sort();
 
-  // Compute feature options based on filtered instances (excluding selectedFeature from filter)
+  const groupedFeatures = useMemo(() => {
+    const processFeatures = (type: InstanceType) => {
+      const featureSet = new Set<string>();
+      features[type]
+        .map(f => typeof f === 'string' ? f : f.name)
+        .filter(f => instances.some(i => i.type === type && i.features.includes(f)))
+        .forEach(f => featureSet.add(f));
+      
+      return Array.from(featureSet)
+        .sort((a, b) => a.localeCompare(b))
+        .map(f => ({ value: f, label: f }));
+    };
+
+    return [
+      {
+        group: 'Virtual Showroom',
+        items: processFeatures('Virtual Showroom'),
+      },
+      {
+        group: 'Apartment Chooser',
+        items: processFeatures('Apartment Chooser'),
+      },
+    ].filter(group => group.items.length > 0);
+  }, [features, instances]);
+
   const flattenedFeatures = useMemo(() => {
-    // Filter instances excluding selectedFeature to get base filtered set
-    const baseFiltered = instances.filter((instance) => {
-      // Partner role: only show starred instances
-      if (userRole === 'partner' && !featuredInstances.has(instance.id)) return false;
-      
-      if (typeFilter.length > 0 && !typeFilter.includes(instance.type)) return false;
-      if (statusFilter.length > 0) {
-        const statusMatch = statusFilter.some(status => {
-          if (status === 'active') return instance.active !== false;
-          if (status === 'inactive') return instance.active === false;
-          return false;
-        });
-        if (!statusMatch) return false;
-      }
-      if (clientFilter.length > 0 && !clientFilter.includes((instance.client || '').trim())) return false;
-      if (projectFilter.length > 0 && !projectFilter.includes(instance.name)) return false;
-      if (featuredFilter.length > 0) {
-        const featuredMatch = featuredFilter.some(f => {
-          if (f === 'featured') return featuredInstances.has(instance.id);
-          if (f === 'not-featured') return !featuredInstances.has(instance.id);
-          return false;
-        });
-        if (!featuredMatch) return false;
-      }
-      return true;
-    });
-
-    // Get all unique features from the filtered instances
-    const featureCounts = new Map<string, number>();
-    baseFiltered.forEach(instance => {
-      instance.features.forEach(feature => {
-        featureCounts.set(feature, (featureCounts.get(feature) || 0) + 1);
-      });
-    });
-
-    // Convert to array with counts and sort
-    return Array.from(featureCounts.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([feature, count]) => ({
-        value: feature,
-        label: `${feature} (${count})`
-      }));
-  }, [instances, userRole, featuredInstances, typeFilter, statusFilter, clientFilter, projectFilter, featuredFilter]);
+    return groupedFeatures.flatMap(group => group.items);
+  }, [groupedFeatures]);
 
 
-  // TODO: RESTORE GROUPING FEATURE - Commented out for now, flag for future restore
   // Grouping logic
-  // const getGroupKey = (instance: ExploreInstance, groupBy: 'client' | 'status' | 'feature'): string => {
-  //   if (groupBy === 'client') {
-  //     return instance.client || '';
-  //   }
-  //   if (groupBy === 'status') {
-  //     return instance.active === false ? 'Inactive' : 'Active';
-  //   }
-  //   if (groupBy === 'feature') {
-  //     // Group by first feature, or "All" if none
-  //     return instance.features.length > 0 ? instance.features[0] : 'All';
-  //   }
-  //   return '';
-  // };
+  const getGroupKey = (instance: ExploreInstance, groupBy: 'client' | 'status' | 'feature'): string => {
+    if (groupBy === 'client') {
+      return instance.client || '';
+    }
+    if (groupBy === 'status') {
+      return instance.active === false ? 'Inactive' : 'Active';
+    }
+    if (groupBy === 'feature') {
+      // Group by first feature, or "All" if none
+      return instance.features.length > 0 ? instance.features[0] : 'All';
+    }
+    return '';
+  };
 
-  // const groupedInstances = useMemo(() => {
-  //   if (groupBy1 === 'none') {
-  //     return { '': filteredInstances };
-  //   }
-
-  //   const groups: Record<string, ExploreInstance[]> = {};
-    
-  //   for (const instance of filteredInstances) {
-  //     const key1 = getGroupKey(instance, groupBy1);
-      
-  //     if (groupBy2 === 'none') {
-  //       if (!groups[key1]) groups[key1] = [];
-  //       groups[key1].push(instance);
-  //     } else {
-  //       // Two-level grouping
-  //       const key2 = getGroupKey(instance, groupBy2);
-  //       const combinedKey = `${key1} | ${key2}`;
-  //       if (!groups[combinedKey]) groups[combinedKey] = [];
-  //       groups[combinedKey].push(instance);
-  //     }
-  //   }
-
-  //   // Sort group keys
-  //   const sortedKeys = Object.keys(groups).sort((a, b) => {
-  //     if (groupBy1 === 'status') {
-  //       // Status: Active first
-  //       if (a.includes('Active') && b.includes('Inactive')) return -1;
-  //       if (a.includes('Inactive') && b.includes('Active')) return 1;
-  //     }
-  //     if (groupBy1 === 'client') {
-  //       // Client: "No Client" first, then alphabetical
-  //       if (a === '' && b !== '') return -1;
-  //       if (a !== '' && b === '') return 1;
-  //     }
-  //     return a.localeCompare(b);
-  //   });
-
-  //   const result: Record<string, ExploreInstance[]> = {};
-  //   for (const key of sortedKeys) {
-  //     result[key] = groups[key];
-  //   }
-  //   return result;
-  // }, [filteredInstances, groupBy1, groupBy2]);
-
-  // Use filteredInstances directly instead of groupedInstances (grouping disabled)
   const groupedInstances = useMemo(() => {
-    return { '': filteredInstances } as Record<string, ExploreInstance[]>;
-  }, [filteredInstances]);
+    if (groupBy1 === 'none') {
+      return { '': filteredInstances };
+    }
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // Only trigger if not typing in an input, textarea, or contenteditable element
-      const target = e.target as HTMLElement;
-      const isInputElement = target.tagName === 'INPUT' || 
-                             target.tagName === 'TEXTAREA' || 
-                             target.isContentEditable ||
-                             target.closest('input') ||
-                             target.closest('textarea');
-      
-      if (isInputElement || e.ctrlKey || e.metaKey || e.altKey) {
-        return;
-      }
-      
-      // 'f' key opens first filter
-      if (e.key === 'f' || e.key === 'F') {
-        e.preventDefault();
-        typeFilterRef.current?.open();
-      }
-      
-      // 'c' key clears all filters
-      if (e.key === 'c' || e.key === 'C') {
-        e.preventDefault();
-        setTypeFilter([]);
-        setClientFilter([]);
-        setProjectFilter([]);
-        setSelectedFeature([]);
-        setStatusFilter([]);
-        setFeaturedFilter([]);
-      }
-      
-      // 'o' key opens all visible projects in new tabs
-      if (e.key === 'o' || e.key === 'O') {
-        e.preventDefault();
-        // Get all instances in display order (from groupedInstances)
-        // TODO: RESTORE GROUPING FEATURE - When restoring, uncomment the sorting logic below
-        const instancesInOrder: ExploreInstance[] = [];
-        // const sortedGroupKeys = Object.keys(groupedInstances).sort((a, b) => {
-        //   if (groupBy1 === 'status') {
-        //     if (a.includes('Active') && b.includes('Inactive')) return -1;
-        //     if (a.includes('Inactive') && b.includes('Active')) return 1;
-        //   }
-        //   if (groupBy1 === 'client') {
-        //     if (a === '' && b !== '') return -1;
-        //     if (a !== '' && b === '') return 1;
-        //   }
-        //   return a.localeCompare(b);
-        // });
-        
-        // Simplified: just use all instances from groupedInstances (which is now just filteredInstances)
-        for (const key of Object.keys(groupedInstances)) {
-          instancesInOrder.push(...groupedInstances[key]);
-        }
-        
-        // Open each instance link in a new tab with a small delay to avoid browser blocking
-        // Keep focus on the current window
-        instancesInOrder.forEach((instance, index) => {
-          if (instance.link) {
-            setTimeout(() => {
-              const newWindow = window.open(instance.link, '_blank', 'noopener,noreferrer');
-              // Try to keep focus on current window (browser may still switch, but this helps)
-              if (newWindow) {
-                window.focus();
-              }
-            }, index * 100); // 100ms delay between each tab
-          }
-        });
-        // Ensure focus returns to current window after opening all tabs
-        setTimeout(() => {
-          window.focus();
-        }, instancesInOrder.length * 100 + 100);
-      }
-    };
+    const groups: Record<string, ExploreInstance[]> = {};
     
-    window.addEventListener('keydown', handleKeyPress);
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress);
-    };
-  }, [groupedInstances]); // TODO: RESTORE GROUPING FEATURE - Add groupBy1 back when restoring
+    for (const instance of filteredInstances) {
+      const key1 = getGroupKey(instance, groupBy1);
+      
+      if (groupBy2 === 'none') {
+        if (!groups[key1]) groups[key1] = [];
+        groups[key1].push(instance);
+      } else {
+        // Two-level grouping
+        const key2 = getGroupKey(instance, groupBy2);
+        const combinedKey = `${key1} | ${key2}`;
+        if (!groups[combinedKey]) groups[combinedKey] = [];
+        groups[combinedKey].push(instance);
+      }
+    }
+
+    // Sort group keys
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      if (groupBy1 === 'status') {
+        // Status: Active first
+        if (a.includes('Active') && b.includes('Inactive')) return -1;
+        if (a.includes('Inactive') && b.includes('Active')) return 1;
+      }
+      if (groupBy1 === 'client') {
+        // Client: "No Client" first, then alphabetical
+        if (a === '' && b !== '') return -1;
+        if (a !== '' && b === '') return 1;
+      }
+      return a.localeCompare(b);
+    });
+
+    const result: Record<string, ExploreInstance[]> = {};
+    for (const key of sortedKeys) {
+      result[key] = groups[key];
+    }
+    return result;
+  }, [filteredInstances, groupBy1, groupBy2]);
 
   // Show loading state while checking authentication
   if (checkingAuth) {
@@ -1916,58 +1614,6 @@ export default function HomePage() {
                 >
                   Clients
                 </Menu.Item>
-                <Menu.Divider />
-                <Menu.Item
-                  leftSection={<IconDownload size={16} />}
-                  onClick={async () => {
-                    try {
-                      const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
-                      const response = await fetch(`${basePath}/api/export`);
-                      if (response.ok) {
-                        const data = await response.json();
-                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `explore-backup-${new Date().toISOString().split('T')[0]}.json`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        alert('Export completed successfully!');
-                      } else {
-                        alert('Failed to export data');
-                      }
-                    } catch (error) {
-                      console.error('Export error:', error);
-                      alert('Failed to export data');
-                    }
-                  }}
-                >
-                  Export All Data
-                </Menu.Item>
-                {isAdmin && (
-                  <>
-                    <Menu.Item
-                      leftSection={<IconUpload size={16} />}
-                      onClick={() => {
-                        setImportModalOpened(true);
-                      }}
-                    >
-                      Import Data
-                    </Menu.Item>
-                    <Menu.Item
-                      leftSection={<IconDatabaseOff size={16} />}
-                      color="red"
-                      onClick={() => {
-                        setDeleteAllModalOpened(true);
-                        setDeleteAllConfirmText('');
-                      }}
-                    >
-                      Delete Everything
-                    </Menu.Item>
-                  </>
-                )}
               </Menu.Dropdown>
             </Menu>
             </>
@@ -2002,90 +1648,76 @@ export default function HomePage() {
       </Box>
 
       <Stack gap="md" mb="xl">
-        {shouldShowFilters && (
-          <Group gap="sm" align="flex-end" wrap="wrap" justify="space-between">
-            <Group gap="sm" align="flex-end" wrap="wrap">
-              <FilterDropdown
-                ref={typeFilterRef}
-                label="Type"
-                data={typeOptions}
-                selectedValues={typeFilter}
-                onApply={setTypeFilter}
-                onClear={() => setTypeFilter([])}
-                searchPlaceholder="Search types"
-                onNavigateRight={() => clientFilterRef.current?.open()}
-                isLeftmost={true}
-              />
-              <FilterDropdown
-                ref={clientFilterRef}
-                label="Client"
-                data={clientOptions}
-                selectedValues={clientFilter}
-                onApply={setClientFilter}
-                onClear={() => setClientFilter([])}
-                searchPlaceholder="Search clients"
-                onNavigateLeft={() => typeFilterRef.current?.open()}
-                onNavigateRight={() => projectFilterRef.current?.open()}
-              />
-              <FilterDropdown
-                ref={projectFilterRef}
-                label="Project"
-                data={projectOptions}
-                selectedValues={projectFilter}
-                onApply={setProjectFilter}
-                onClear={() => setProjectFilter([])}
-                searchPlaceholder="Search projects"
-                onNavigateLeft={() => clientFilterRef.current?.open()}
-                onNavigateRight={() => featureFilterRef.current?.open()}
-              />
-              <FilterDropdown
-                ref={featureFilterRef}
-                label="Feature"
-                data={flattenedFeatures}
-                selectedValues={selectedFeature}
-                onApply={setSelectedFeature}
-                onClear={() => setSelectedFeature([])}
-                searchPlaceholder="Search features"
-                onNavigateLeft={() => projectFilterRef.current?.open()}
-                onNavigateRight={() => {
-                  if (userRole === 'partner') {
-                    // Partners don't have status filter, so feature is rightmost
-                    return;
-                  }
-                  statusFilterRef.current?.open();
-                }}
-                isRightmost={userRole === 'partner'}
-              />
-              {userRole !== 'partner' && (
-                <FilterDropdown
-                  ref={statusFilterRef}
-                  label="Status"
-                  data={statusOptions}
-                  selectedValues={statusFilter}
-                  onApply={setStatusFilter}
-                  onClear={() => setStatusFilter([])}
-                  searchPlaceholder="Search status"
-                  onNavigateLeft={() => featureFilterRef.current?.open()}
-                  onNavigateRight={() => starredFilterRef.current?.open()}
-                  isRightmost={false}
-                />
-              )}
-              {userRole !== 'partner' && (
-                <FilterDropdown
-                  ref={starredFilterRef}
-                  label="Starred"
-                  data={featuredOptions}
-                  selectedValues={featuredFilter}
-                  onApply={setFeaturedFilter}
-                  onClear={() => setFeaturedFilter([])}
-                  searchPlaceholder="Search"
-                  onNavigateLeft={() => statusFilterRef.current?.open()}
-                  isRightmost={true}
-                />
-              )}
-            </Group>
-            {/* TODO: RESTORE GROUPING FEATURE - Commented out for now, flag for future restore */}
-            {/* <Group gap="sm" align="flex-end" wrap="wrap">
+        <Group gap="sm" align="flex-end" wrap="wrap">
+          <FilterDropdown
+            ref={typeFilterRef}
+            label="Type"
+            data={typeOptions}
+            selectedValues={typeFilter}
+            onApply={setTypeFilter}
+            onClear={() => setTypeFilter([])}
+            searchPlaceholder="Search types"
+            onNavigateRight={() => clientFilterRef.current?.open()}
+            isLeftmost={true}
+          />
+          <FilterDropdown
+            ref={clientFilterRef}
+            label="Client"
+            data={clientOptions}
+            selectedValues={clientFilter}
+            onApply={setClientFilter}
+            onClear={() => setClientFilter([])}
+            searchPlaceholder="Search clients"
+            onNavigateLeft={() => typeFilterRef.current?.open()}
+            onNavigateRight={() => projectFilterRef.current?.open()}
+          />
+          <FilterDropdown
+            ref={projectFilterRef}
+            label="Project"
+            data={projectOptions}
+            selectedValues={projectFilter}
+            onApply={setProjectFilter}
+            onClear={() => setProjectFilter([])}
+            searchPlaceholder="Search projects"
+            onNavigateLeft={() => clientFilterRef.current?.open()}
+            onNavigateRight={() => featureFilterRef.current?.open()}
+          />
+          <FilterDropdown
+            ref={featureFilterRef}
+            label="Feature"
+            data={flattenedFeatures}
+            selectedValues={selectedFeature}
+            onApply={setSelectedFeature}
+            onClear={() => setSelectedFeature([])}
+            searchPlaceholder="Search features"
+            onNavigateLeft={() => projectFilterRef.current?.open()}
+            onNavigateRight={() => statusFilterRef.current?.open()}
+          />
+          <FilterDropdown
+            ref={statusFilterRef}
+            label="Status"
+            data={statusOptions}
+            selectedValues={statusFilter}
+            onApply={setStatusFilter}
+            onClear={() => setStatusFilter([])}
+            searchPlaceholder="Search status"
+            onNavigateLeft={() => featureFilterRef.current?.open()}
+            onNavigateRight={() => userRole !== 'partner' && starredFilterRef.current?.open()}
+            isRightmost={userRole === 'partner'}
+          />
+          {userRole !== 'partner' && (
+            <FilterDropdown
+              ref={starredFilterRef}
+              label="Starred"
+              data={featuredOptions}
+              selectedValues={featuredFilter}
+              onApply={setFeaturedFilter}
+              onClear={() => setFeaturedFilter([])}
+              searchPlaceholder="Search"
+              onNavigateLeft={() => statusFilterRef.current?.open()}
+              isRightmost={true}
+            />
+          )}
               <Select
                 placeholder="Group by..."
                 data={[
@@ -2123,11 +1755,9 @@ export default function HomePage() {
                   styles={filterDropdownStyles}
                 />
               )}
-            </Group> */}
-          </Group>
-        )}
+            </Group>
             {/* Filter Tags Row */}
-            {shouldShowFilters && (typeFilter.length > 0 || clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
+            {(typeFilter.length > 0 || clientFilter.length > 0 || projectFilter.length > 0 || selectedFeature.length > 0 || statusFilter.length > 0 || featuredFilter.length > 0) && (
               <Group gap="xs" wrap="wrap">
                 {typeFilter.map((type) => (
                   <FilterTag
@@ -2161,7 +1791,7 @@ export default function HomePage() {
                     onRemove={() => setSelectedFeature(selectedFeature.filter(f => f !== feature))}
                   />
                 ))}
-                {userRole !== 'partner' && statusFilter.map((status) => {
+                {statusFilter.map((status) => {
                   const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
                   return (
                     <FilterTag
@@ -2185,24 +1815,72 @@ export default function HomePage() {
                 })}
               </Group>
             )}
-            {/* TODO: RESTORE GROUPING FEATURE - Simplified rendering since grouping is disabled */}
             {Object.keys(groupedInstances).length > 0 ? (
               Object.keys(groupedInstances).length === 1 ? (
-                // Single group: render without accordion (grouping disabled, so just show filteredInstances)
+                // Single group: render without accordion
                 (() => {
                   const [groupKey, groupInstances] = Object.entries(groupedInstances)[0];
                   const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+                  let displayKey = groupKey;
+                  let clientName: string | null = null;
+                  
+                  if (groupKey.includes(' | ')) {
+                    const parts = groupKey.split(' | ');
+                    if (groupBy1 === 'client' && parts[0]) {
+                      clientName = parts[0];
+                      displayKey = `${parts[0]} → ${parts[1]}`;
+                    } else if (groupBy2 === 'client' && parts[1]) {
+                      clientName = parts[1];
+                      displayKey = `${parts[0]} → ${parts[1]}`;
+                    } else {
+                      displayKey = `${parts[0]} → ${parts[1]}`;
+                    }
+                  } else {
+                    if (groupBy1 === 'client') {
+                      clientName = groupKey || null;
+                      displayKey = groupKey || 'No Client';
+                    } else {
+                      displayKey = groupKey || 'All Projects';
+                    }
+                  }
+                  
+                  const clientLogo = clientName && clients[clientName]?.logo;
+                  const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
                   
                   return (
-                    <Box
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                        gap: '16px',
-                        width: '100%',
-                      }}
-                    >
-                      {groupInstances.map((instance, index) => (
+                    <Stack gap="md">
+                      {displayKey !== 'All Projects' && groupKey !== '' && (
+                        <Group gap="sm" align="center">
+                          <Text fw={500} size="lg">
+                            {groupKey.includes(' | ') ? (
+                              <>
+                                {groupKey.split(' | ')[0]} <Text component="span" c="dimmed" size="md" fw={400}>→ {groupKey.split(' | ')[1]}</Text>
+                              </>
+                            ) : (
+                              displayKey
+                            )}
+                          </Text>
+                          {logoPath && (
+                            <Image
+                              src={logoPath}
+                              alt={clientName || ''}
+                              width={24}
+                              height={24}
+                              style={{ borderRadius: '4px', objectFit: 'cover', flexShrink: 0, marginRight: '18px' }}
+                            />
+                          )}
+                          <Badge size="sm" variant="light">{groupInstances.length}</Badge>
+                        </Group>
+                      )}
+                      <Box
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                          gap: '16px',
+                          width: '100%',
+                        }}
+                      >
+                        {groupInstances.map((instance, index) => (
                           <Card
                             key={instance.id} 
                       shadow="sm"
@@ -2213,19 +1891,14 @@ export default function HomePage() {
                         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         textDecoration: 'none',
                         backgroundColor: '#E0E4EB',
-                        background: '#E0E4EB',
-                      } as React.CSSProperties} 
+                      }} 
                       padding={0} 
                       radius="md" 
                       h="100%"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (instance.link) {
-                          window.open(instance.link, '_blank', 'noopener,noreferrer');
-                          // Keep focus on current window
-                          window.focus();
-                        }
-                      }}
+                      component="a"
+                      href={instance.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                         e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -2268,12 +1941,14 @@ export default function HomePage() {
                               variant="filled"
                               color={featuredInstances.has(instance.id) ? 'yellow' : 'gray'}
                               size="sm"
+                              data-starred={featuredInstances.has(instance.id) ? 'true' : 'false'}
                               style={{
                                 position: 'absolute',
                                 top: 8,
                                 right: 8,
                                 zIndex: 10,
-                                backgroundColor: featuredInstances.has(instance.id) ? 'var(--mantine-color-yellow-6)' : 'rgba(0, 0, 0, 0.5)',
+                                backgroundColor: featuredInstances.has(instance.id) ? '#FFD700' : 'rgba(0, 0, 0, 0.5)',
+                                color: featuredInstances.has(instance.id) ? '#FFFFFF' : undefined,
                               }}
                               onClick={(e) => {
                                 e.preventDefault();
@@ -2281,7 +1956,7 @@ export default function HomePage() {
                                 toggleFeatured(instance.id);
                               }}
                             >
-                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+                              {featuredInstances.has(instance.id) ? <IconStarFilled size={16} style={{ color: '#FFFFFF' }} /> : <IconStar size={16} />}
                             </ActionIcon>
                           )}
                           {instance.features.length > 0 && (
@@ -2308,23 +1983,15 @@ export default function HomePage() {
                                       // Icon not found, silently continue
                                     }
                                   }
-                                  const textColor = featureColor 
-                                    ? (isDark ? '#FFFFFF' : '#19191B') 
-                                    : '#FFFFFF';
-                                  
                                   return (
                                     <Badge 
                                       key={feature} 
                                       size="sm" 
                                       variant="light" 
-                                      data-feature-badge="true"
-                                      data-is-dark={isDark ? 'true' : 'false'}
                                       styles={{
                                         root: {
                                           backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                          // Ensure light backgrounds get dark text, dark backgrounds get white text
-                                          color: textColor,
-                                          fontWeight: 500,
+                                          color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
                                         },
                                       }}
                                       leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
@@ -2395,10 +2062,10 @@ export default function HomePage() {
                             {instance.client && (
                               <Group gap={8} align="center">
                                 {clients[instance.client]?.logo && (() => {
-                                  const logoPath = normalizeLogoPath(clients[instance.client]!.logo!, basePath);
+                                  const logoPath = clients[instance.client]!.logo!;
                                   return (
                                     <Image
-                                      src={logoPath!}
+                                      src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
                                       alt={instance.client}
                                       width={16}
                                       height={16}
@@ -2433,11 +2100,11 @@ export default function HomePage() {
                         </Card>
                         ))}
                       </Box>
-                    );
-                  })()
+                    </Stack>
+                  );
+                })()
               ) : (
-                // TODO: RESTORE GROUPING FEATURE - Accordion for multiple groups (currently disabled since grouping is off)
-                // Multiple groups: use accordion (this won't be used since groupedInstances is always { '': filteredInstances })
+                // Multiple groups: use accordion
                 <Accordion variant="separated" radius="md" defaultValue={Object.keys(groupedInstances)[0] || 'group-0'}>
                   {Object.entries(groupedInstances).map(([groupKey, groupInstances], index) => {
                     const accordionValue = groupKey || `group-${index}`;
@@ -2450,33 +2117,28 @@ export default function HomePage() {
                             let displayKey = groupKey;
                             let clientName: string | null = null;
                             
-                            // TODO: RESTORE GROUPING FEATURE - This code handles grouped display, currently disabled
-                            // Since groupedInstances is now just { '': filteredInstances }, groupKey will always be ''
-                            // if (groupKey.includes(' | ')) {
-                            //   const parts = groupKey.split(' | ');
-                            //   if (groupBy1 === 'client' && parts[0]) {
-                            //     clientName = parts[0];
-                            //     displayKey = `${parts[0]} → ${parts[1]}`;
-                            //   } else if (groupBy2 === 'client' && parts[1]) {
-                            //     clientName = parts[1];
-                            //     displayKey = `${parts[0]} → ${parts[1]}`;
-                            //   } else {
-                            //     displayKey = `${parts[0]} → ${parts[1]}`;
-                            //   }
-                            // } else {
-                            //   if (groupBy1 === 'client') {
-                            //     clientName = groupKey || null;
-                            //     displayKey = groupKey || 'No Client';
-                            //   } else {
-                            //     displayKey = groupKey;
-                            //   }
-                            // }
-                            // Simplified: no grouping, so just use empty string
-                            displayKey = '';
-                            clientName = null;
+                            if (groupKey.includes(' | ')) {
+                              const parts = groupKey.split(' | ');
+                              if (groupBy1 === 'client' && parts[0]) {
+                                clientName = parts[0];
+                                displayKey = `${parts[0]} → ${parts[1]}`;
+                              } else if (groupBy2 === 'client' && parts[1]) {
+                                clientName = parts[1];
+                                displayKey = `${parts[0]} → ${parts[1]}`;
+                              } else {
+                                displayKey = `${parts[0]} → ${parts[1]}`;
+                              }
+                            } else {
+                              if (groupBy1 === 'client') {
+                                clientName = groupKey || null;
+                                displayKey = groupKey || 'No Client';
+                              } else {
+                                displayKey = groupKey || 'All Projects';
+                              }
+                            }
                             
                             const clientLogo = clientName && clients[clientName]?.logo;
-                            const logoPath = normalizeLogoPath(clientLogo || undefined, basePath);
+                            const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
                             
                             if (displayKey === 'All Projects' || groupKey === '') {
                               return null;
@@ -2532,19 +2194,14 @@ export default function HomePage() {
                                   transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                                   textDecoration: 'none',
                                   backgroundColor: '#E0E4EB',
-                                  background: '#E0E4EB',
-                                } as React.CSSProperties} 
+                                }} 
                                 padding={0} 
                                 radius="md" 
                                 h="100%"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  if (instance.link) {
-                                    window.open(instance.link, '_blank', 'noopener,noreferrer');
-                                    // Keep focus on current window
-                                    window.focus();
-                                  }
-                                }}
+                                component="a"
+                                href={instance.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
                                   e.currentTarget.style.boxShadow = 'var(--mantine-shadow-md)';
@@ -2627,23 +2284,15 @@ export default function HomePage() {
                                                 // Icon not found, silently continue
                                               }
                                             }
-                                            const textColor = featureColor 
-                                              ? (isDark ? '#FFFFFF' : '#19191B') 
-                                              : '#FFFFFF';
-                                            
                                             return (
                                               <Badge 
                                                 key={feature} 
                                                 size="sm" 
                                                 variant="light" 
-                                                data-feature-badge="true"
-                                                data-is-dark={isDark ? 'true' : 'false'}
                                                 styles={{
                                                   root: {
                                                     backgroundColor: featureColor || 'rgba(255, 255, 255, 0.2)',
-                                                    // Ensure light backgrounds get dark text, dark backgrounds get white text
-                                                    color: textColor,
-                                                    fontWeight: 500,
+                                                    color: featureColor ? (isDark ? 'white' : '#0A082D') : 'white',
                                                   },
                                                 }}
                                                 leftSection={IconComponent ? <IconComponent size={14} /> : undefined}
@@ -2714,10 +2363,10 @@ export default function HomePage() {
                                       {instance.client && (
                                         <Group gap={8} align="center">
                                           {clients[instance.client]?.logo && (() => {
-                                            const logoPath = normalizeLogoPath(clients[instance.client]!.logo!, basePath);
+                                            const logoPath = clients[instance.client]!.logo!;
                                             return (
                                               <Image
-                                                src={logoPath!}
+                                                src={basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath}
                                                 alt={instance.client}
                                                 width={16}
                                                 height={16}
@@ -2807,32 +2456,33 @@ export default function HomePage() {
             onChange={(value) => setFormClient(value || '')}
             clearable
             searchable
-            {...({
-              itemComponent: ({ label, value, ...others }: any) => {
-                const clientLogo = others.logo;
-                const logoPath = normalizeLogoPath(clientLogo, basePath);
-                
-                return (
-                  <Group gap="sm" align="center" {...others}>
-                    {logoPath && (
-                      <Image
-                        src={logoPath}
-                        alt={value}
-                        width={20}
-                        height={20}
-                        style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
-                      />
-                    )}
-                    <Text>{label}</Text>
-                  </Group>
-                );
-              }
-            } as any)}
+            itemComponent={({ label, value, ...others }: any) => {
+              const clientLogo = others.logo;
+              const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+              const logoPath = clientLogo ? (basePath && !clientLogo.startsWith(basePath) ? `${basePath}${clientLogo}` : clientLogo) : null;
+              
+              return (
+                <Group gap="sm" align="center" {...others}>
+                  {logoPath && (
+                    <Image
+                      src={logoPath}
+                      alt={value}
+                      width={20}
+                      height={20}
+                      style={{ borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }}
+                    />
+                  )}
+                  <Text>{label}</Text>
+                </Group>
+              );
+            }}
             leftSection={formClient && clients[formClient]?.logo ? (() => {
-              const logoPath = normalizeLogoPath(clients[formClient]!.logo!, basePath);
+              const basePath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
+              const logoPath = clients[formClient]!.logo!;
+              const fullLogoPath = basePath && !logoPath.startsWith(basePath) ? `${basePath}${logoPath}` : logoPath;
               return (
                 <Image
-                  src={logoPath!}
+                  src={fullLogoPath}
                   alt={formClient}
                   width={20}
                   height={20}
@@ -3038,33 +2688,21 @@ export default function HomePage() {
                           withArrow
                         >
                           <Popover.Target>
-                            {(() => {
-                              const featureColor = (typeof feature === 'string' ? featureColors[feature] : feature.color) || '';
-                              const isDarkColor = featureColor ? isColorDark(featureColor) : false;
-                              const textColor = featureColor 
-                                ? (isDarkColor ? '#FFFFFF' : '#19191B') 
-                                : undefined;
-                              
-                              return (
-                                <Button
-                                  variant="light"
-                                  size="xs"
-                                  data-feature-color-button="true"
-                                  data-is-dark={isDarkColor ? 'true' : 'false'}
-                                  onClick={() => {
-                                    setColorPickerOpen({ ...colorPickerOpen, [`${type}-${index}`]: true });
-                                  }}
-                                  style={{
-                                    backgroundColor: featureColor || 'transparent',
-                                    border: featureColor ? `2px solid ${featureColor}` : '1px solid rgba(255, 255, 255, 0.3)',
-                                    color: textColor,
-                                    minWidth: '60px',
-                                  }}
-                                >
-                                  {featureColor ? 'Color' : 'Pick'}
-                                </Button>
-                              );
-                            })()}
+                            <Button
+                              variant="light"
+                              size="xs"
+                              onClick={() => {
+                                setColorPickerOpen({ ...colorPickerOpen, [`${type}-${index}`]: true });
+                              }}
+                              style={{
+                                backgroundColor: (typeof feature === 'string' ? featureColors[feature] : feature.color) || 'transparent',
+                                border: (typeof feature === 'string' ? featureColors[feature] : feature.color) ? `2px solid ${(typeof feature === 'string' ? featureColors[feature] : feature.color)}` : '1px solid rgba(255, 255, 255, 0.3)',
+                                color: (typeof feature === 'string' ? featureColors[feature] : feature.color) ? (isColorDark((typeof feature === 'string' ? featureColors[feature] : feature.color) || '') ? 'white' : '#0A082D') : undefined,
+                                minWidth: '60px',
+                              }}
+                            >
+                              {(typeof feature === 'string' ? featureColors[feature] : feature.color) ? 'Color' : 'Pick'}
+                            </Button>
                           </Popover.Target>
                           <Popover.Dropdown>
                             <Stack gap="xs" p="xs">
@@ -3601,7 +3239,7 @@ export default function HomePage() {
                       {client.logo ? (
                         <>
                           <Image
-                            src={normalizeLogoPath(client.logo, basePath)!}
+                            src={basePath && !client.logo.startsWith(basePath) ? `${basePath}${client.logo}` : client.logo}
                             alt={clientName}
                             width={32}
                             height={32}
